@@ -1,0 +1,6 @@
+#ifndef SEDSPRINTF_LIBRARY_H
+#define SEDSPRINTF_LIBRARY_H
+
+void hello();
+
+#endif // SEDSPRINTF_LIBRARY_H

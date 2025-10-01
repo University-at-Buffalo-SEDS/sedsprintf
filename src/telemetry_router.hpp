@@ -8,24 +8,17 @@ typedef struct
     size_t num_helpers;
 } SEDSPRINTF_CONFIG;
 
-typedef enum
-{
-    OK,
-    ERROR,
-} SEDSPRINTF_STATUS;
-
-
 class sedsprintf
 {
 public:
     sedsprintf(transmit_helper_t * transmit_helpers, size_t num_helpers);
 
-    SEDSPRINTF_STATUS log(message_type_t, void * data);
+    SEDSPRINTF_STATUS log(message_type_t, void * data) const;
 
 private:
-    SEDSPRINTF_STATUS transmit(telemetry_packet_t * packet);
+    SEDSPRINTF_STATUS transmit(telemetry_packet_t * packet) const;
 
-    SEDSPRINTF_STATUS receive(telemetry_packet_t * packet);
+    static SEDSPRINTF_STATUS receive(const telemetry_packet_t * packet);
 
     SEDSPRINTF_CONFIG cfg{};
 };

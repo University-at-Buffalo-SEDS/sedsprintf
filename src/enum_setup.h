@@ -3,7 +3,6 @@
 #define SEDSPRINTF_CONFIG_H
 
 
-
 // ========================= DO NOT EDIT THIS SECTION =========================
 
 // ===========================================================================
@@ -29,8 +28,7 @@ typedef enum
     BATTERY_STATUS,
     SYSTEM_STATUS,
 
-    NUM_DATA_TYPES  // Always keep this as the last entry
-
+    NUM_DATA_TYPES // Always keep this as the last entry
 } data_type_t;
 
 // ========================= END USER-EDITABLE SECTION ========================

@@ -23,14 +23,20 @@
 #include <cstddef>  // size_t
 #include <ctime>
 
-typedef void (* receive_helper_t)();
+typedef enum
+{
+    SEDSPRINTF_OK,
+    SEDSPRINTF_ERROR,
+} SEDSPRINTF_STATUS;
+
+typedef SEDSPRINTF_STATUS (* receive_helper_t)();
 
 typedef struct
 {
     data_type_t type;
     size_t data_size;
 
-    data_endpoint_t *endpoints; // list of endpoints to send this data to
+    data_endpoint_t * endpoints; // list of endpoints to send this data to
     size_t num_endpoints; // number of endpoints in the list
 } message_type_t;
 
@@ -56,6 +62,6 @@ typedef struct
     void * data;
 } telemetry_packet_t;
 
-typedef void (* transmit_helper_t)(telemetry_packet_t * packet);
+typedef SEDSPRINTF_STATUS (* transmit_helper_t)(telemetry_packet_t * packet);
 
 #endif //SEDSPRINTF_TELEMETRY_PACKET_H

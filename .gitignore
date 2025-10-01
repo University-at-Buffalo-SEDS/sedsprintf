@@ -9,3 +9,7 @@
 .DS_Store
 # IntelliJ project files
 .idea/
+# CMake files
+/build/
+/CMakeFiles/
+/.vscode

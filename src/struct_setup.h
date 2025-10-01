@@ -34,7 +34,7 @@ static data_endpoint_t * endpoints[NUM_DATA_TYPES] = {
 };
 
 // Helper to measure a sentinel-terminated list
-static inline size_t endpoint_len(const data_endpoint_t * eps)
+static size_t endpoint_len(const data_endpoint_t * eps)
 {
     size_t n = 0;
     while (eps[n] != NUM_DATA_ENDPOINTS) ++n;

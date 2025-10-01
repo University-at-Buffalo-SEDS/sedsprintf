@@ -24,8 +24,10 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
         return SEDSPRINTF_OK;
     for (size_t i = 0; i < packet->message_type.num_endpoints; i++)
     {
+        //transmit loop
         for (size_t j = 0; j < cfg.num_helpers; j++)
         {
+            //transmit all remote endpoints
             if (cfg.transmit_helpers[j] != nullptr &&
                 board_config.data_endpoints[j].endpoint != packet->message_type.endpoints[i])
             {
@@ -35,6 +37,8 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
                 }
             }
         }
+        //local save loop
+        //handle all local endpoints
         for (size_t j = 0; j < board_config.num_endpoints; j++)
         {
             if (board_config.data_endpoints[j].receive_handler != nullptr &&

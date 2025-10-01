@@ -3,4 +3,4 @@ project(sedsprintf)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_library(sedsprintf STATIC library.cpp)
+add_library(sedsprintf STATIC src/telemetry_router.cpp)

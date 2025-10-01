@@ -21,17 +21,7 @@
 #ifndef SEDSPRINTF_STRUCT_SETUP_H
 #define SEDSPRINTF_STRUCT_SETUP_H
 #include "telemetry_packet.h"
-
-// Add sentinel at the end of each row
-static data_endpoint_t gps_eps[] = {SD_CARD, RADIO, NUM_DATA_ENDPOINTS};
-static data_endpoint_t imu_eps[] = {SD_CARD, RADIO, NUM_DATA_ENDPOINTS};
-static data_endpoint_t batt_eps[] = {SD_CARD, RADIO, NUM_DATA_ENDPOINTS};
-static data_endpoint_t sys_eps[] = {SD_CARD, NUM_DATA_ENDPOINTS};
-
-// Array of pointers
-static data_endpoint_t * endpoints[NUM_DATA_TYPES] = {
-    gps_eps, imu_eps, batt_eps, sys_eps
-};
+// ========================= DO NOT EDIT THIS SECTION =========================
 
 // Helper to measure a sentinel-terminated list
 static size_t endpoint_len(const data_endpoint_t * eps)
@@ -40,9 +30,22 @@ static size_t endpoint_len(const data_endpoint_t * eps)
     while (eps[n] != NUM_DATA_ENDPOINTS) ++n;
     return n;
 }
+// ===========================================================================
 
-static_assert(sizeof(endpoints) / (sizeof(data_endpoint_t) * NUM_DATA_ENDPOINTS) == NUM_DATA_TYPES,
-              "message_type_t size is incorrect");
+
+// =========================== USER-EDITABLE SECTION ==========================
+
+// Add sentinel at the end of each row
+static data_endpoint_t gps_eps[] = {SD_CARD, RADIO, NUM_DATA_ENDPOINTS};
+static data_endpoint_t imu_eps[] = {SD_CARD, RADIO, NUM_DATA_ENDPOINTS};
+static data_endpoint_t batt_eps[] = {SD_CARD, RADIO, NUM_DATA_ENDPOINTS};
+static data_endpoint_t sys_eps[] = {SD_CARD, NUM_DATA_ENDPOINTS};
+
+// Array of pointers (this is needed to ensure all message types have their own endpoint lists)
+static data_endpoint_t * endpoints[NUM_DATA_TYPES] = {
+    gps_eps, imu_eps, batt_eps, sys_eps
+};
+
 
 static message_type_t message_type[] = {
     {GPS_DATA, sizeof(float) * 3, endpoints[GPS_DATA], endpoint_len(endpoints[GPS_DATA])},
@@ -50,8 +53,6 @@ static message_type_t message_type[] = {
     {BATTERY_STATUS, sizeof(float) * 2, endpoints[BATTERY_STATUS], endpoint_len(endpoints[BATTERY_STATUS])},
     {SYSTEM_STATUS, sizeof(int) * 8, endpoints[SYSTEM_STATUS], endpoint_len(endpoints[SYSTEM_STATUS])},
 };
-
-static_assert(sizeof(message_type) / sizeof(message_type_t) == NUM_DATA_TYPES, "message_type_t size is incorrect");
 //these should be changed to the correct config for each board
 static const board_config_t board_config = {
     // Define the data endpoints available on this board
@@ -61,6 +62,16 @@ static const board_config_t board_config = {
     },
     .num_endpoints = 2 // Number of endpoints defined above
 };
+// ========================= END USER-EDITABLE SECTION ========================
 
+
+// ========================= DO NOT EDIT THIS SECTION =========================
+// Ensure the size of the endpoints array is correct
+static_assert(sizeof(endpoints) / (sizeof(data_endpoint_t) * NUM_DATA_ENDPOINTS) == NUM_DATA_TYPES,
+              "message_type_t size is incorrect");
+
+// Ensure the size of the message_type array is correct
+static_assert(sizeof(message_type) / sizeof(message_type_t) == NUM_DATA_TYPES, "message_type_t size is incorrect");
+// ===========================================================================
 
 #endif //SEDSPRINTF_STRUCT_SETUP_H

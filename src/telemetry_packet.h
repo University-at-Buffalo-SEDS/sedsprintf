@@ -22,7 +22,7 @@
 #include "enum_setup.h"
 #include <cstddef>  // size_t
 #include <ctime>
-
+// ========================= DO NOT EDIT THIS SECTION =========================
 typedef enum
 {
     SEDSPRINTF_OK,
@@ -63,5 +63,6 @@ typedef struct
 } telemetry_packet_t;
 
 typedef SEDSPRINTF_STATUS (* transmit_helper_t)(telemetry_packet_t * packet);
+// ===========================================================================
 
 #endif //SEDSPRINTF_TELEMETRY_PACKET_H

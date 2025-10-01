@@ -17,6 +17,8 @@ typedef enum
     // Add all possible data endpoints here
     SD_CARD,
     RADIO,
+
+    NUM_DATA_ENDPOINTS
 } data_endpoint_t;
 
 typedef enum

@@ -21,13 +21,17 @@
 #define SEDSPRINTF_TELEMETRY_PACKET_H
 #include "enum_setup.h"
 #include <cstddef>  // size_t
+#include <ctime>
 
 typedef void (* receive_helper_t)();
 
 typedef struct
 {
     data_type_t type;
-    size_t size;
+    size_t data_size;
+
+    data_endpoint_t *endpoints; // list of endpoints to send this data to
+    size_t num_endpoints; // number of endpoints in the list
 } message_type_t;
 
 // Table entry describing a supported endpoint on this board.
@@ -46,8 +50,8 @@ typedef struct
 
 typedef struct
 {
-    data_endpoint_t * endpoints; //array of endpoints to send data to
     message_type_t message_type;
+    time_t timestamp;
     //the data can be any type, so we use a void pointer
     void * data;
 } telemetry_packet_t;

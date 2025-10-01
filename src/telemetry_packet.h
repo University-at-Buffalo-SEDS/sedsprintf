@@ -11,7 +11,7 @@
 //-----------------------------------------------------------------------------
 //
 // DESCRIPTION:
-//    <ENTER-FILE-DESCRIPTION>
+//    this defines the necessary structures for a telemetry packet
 //
 //*****************************************************************************
 //
@@ -19,18 +19,39 @@
 //
 #ifndef SEDSPRINTF_TELEMETRY_PACKET_H
 #define SEDSPRINTF_TELEMETRY_PACKET_H
-#include "config.h"
+#include "enum_setup.h"
+#include <cstddef>  // size_t
+
+typedef void (* receive_helper_t)();
 
 typedef struct
-    {
-        data_endpoint_t* endpoints; //array of endpoints to send data to
-        message_type_t message_type;
-        void* data;               //pointer to data to be sent
-    } telemetry_packet_t;
+{
+    data_type_t type;
+    size_t size;
+} message_type_t;
 
+// Table entry describing a supported endpoint on this board.
+typedef struct
+{
+    data_endpoint_t endpoint;
+    receive_helper_t receive_handler; // set NULL if unused
+} data_endpoint_handler_t;
 
+// Board-wide configuration (what endpoints exist, etc.)
+typedef struct
+{
+    const data_endpoint_handler_t * data_endpoints;
+    size_t num_endpoints;
+} board_config_t;
 
+typedef struct
+{
+    data_endpoint_t * endpoints; //array of endpoints to send data to
+    message_type_t message_type;
+    //the data can be any type, so we use a void pointer
+    void * data;
+} telemetry_packet_t;
 
-
+typedef void (* transmit_helper_t)(telemetry_packet_t * packet);
 
 #endif //SEDSPRINTF_TELEMETRY_PACKET_H

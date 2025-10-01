@@ -12,3 +12,4 @@
 # CMake files
 /build/
 /CMakeFiles/
+/.vscode

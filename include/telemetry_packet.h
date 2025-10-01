@@ -22,6 +22,7 @@
 #include "enum_setup.h"
 #include <cstddef>  // size_t
 #include <ctime>
+
 // ========================= DO NOT EDIT THIS SECTION =========================
 typedef enum
 {
@@ -29,18 +30,28 @@ typedef enum
     SEDSPRINTF_ERROR,
 } SEDSPRINTF_STATUS;
 
-typedef SEDSPRINTF_STATUS (* receive_helper_t)();
 
 typedef struct
 {
     data_type_t type;
     size_t data_size;
-
     data_endpoint_t * endpoints; // list of endpoints to send this data to
     size_t num_endpoints; // number of endpoints in the list
 } message_type_t;
 
 // Table entry describing a supported endpoint on this board.
+
+
+typedef struct
+{
+    message_type_t message_type;
+    time_t timestamp;
+    //the data can be any type, so we use a void pointer
+    void * data;
+} telemetry_packet_t;
+
+typedef SEDSPRINTF_STATUS (* receive_helper_t)(telemetry_packet_t * buffer);
+
 typedef struct
 {
     data_endpoint_t endpoint;
@@ -54,15 +65,6 @@ typedef struct
     size_t num_endpoints;
 } board_config_t;
 
-typedef struct
-{
-    message_type_t message_type;
-    time_t timestamp;
-    //the data can be any type, so we use a void pointer
-    void * data;
-} telemetry_packet_t;
-
-typedef SEDSPRINTF_STATUS (* transmit_helper_t)(telemetry_packet_t * packet);
 // ===========================================================================
 
 #endif //SEDSPRINTF_TELEMETRY_PACKET_H

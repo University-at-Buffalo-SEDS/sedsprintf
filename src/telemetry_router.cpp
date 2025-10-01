@@ -1,10 +1,34 @@
 #include "telemetry_router.hpp"
 
+#include <cstdint>
+#include <cstring>
 
-sedsprintf::sedsprintf(transmit_helper_t * transmit_helpers, size_t num_helpers)
+#include "serialize.h"
+
+SEDSPRINTF_STATUS sedsprintf::copy_telemetry_packet(telemetry_packet_t * dest, const telemetry_packet_t * src)
+{
+    //copy the packet without using the heap
+    if (!dest || !src) return SEDSPRINTF_ERROR;
+    if (dest == src) return SEDSPRINTF_OK; //same packet,
+    dest->message_type = src->message_type;
+    dest->timestamp = src->timestamp;
+    if (src->message_type.data_size > 0 && src->data)
+    {
+        //check buffer        size?
+        if (dest->data == nullptr || dest->message_type.data_size < src->message_type.data_size)
+        {
+            return SEDSPRINTF_ERROR;
+        }
+        memcpy(dest->data, src->data, src->message_type.data_size);
+    }
+    return SEDSPRINTF_OK;
+}
+
+sedsprintf::sedsprintf(transmit_helper_t transmit_helpers[], size_t num_helpers, board_config_t config)
 {
     this->cfg.transmit_helpers = transmit_helpers;
     this->cfg.num_helpers = num_helpers;
+    this->cfg.board_config = config;
 }
 
 SEDSPRINTF_STATUS sedsprintf::log(message_type_t type, void * data) const
@@ -14,37 +38,47 @@ SEDSPRINTF_STATUS sedsprintf::log(message_type_t type, void * data) const
     packet.data = data;
     packet.timestamp = std::time(nullptr);
     // For simplicity, we send to all endpoints defined in board_config
-    SEDSPRINTF_STATUS status = transmit(&packet);
+    const SEDSPRINTF_STATUS status = transmit(&packet);
     return status;
 }
 
 SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
 {
+    const size_t size = get_packet_size(packet);
+    uint8_t buff[size];
+    serialized_buffer_t serialized = create_serialized_buffer(buff, size);
+    serialize_packet(packet, &serialized);
+    int transmitted = 0;
     if (packet->message_type.num_endpoints == 0)
         return SEDSPRINTF_OK;
     for (size_t i = 0; i < packet->message_type.num_endpoints; i++)
     {
         //transmit loop
-        for (size_t j = 0; j < cfg.num_helpers; j++)
+        if (!transmitted)
         {
-            //transmit all remote endpoints
-            if (cfg.transmit_helpers[j] != nullptr &&
-                board_config.data_endpoints[j].endpoint != packet->message_type.endpoints[i])
+            //already transmitted, skip
+            for (size_t j = 0; j < cfg.num_helpers; j++)
             {
-                if (cfg.transmit_helpers[j](packet) != SEDSPRINTF_OK)
+                //transmit all remote endpoints
+                if (cfg.transmit_helpers[j] != nullptr &&
+                    cfg.board_config.data_endpoints[j].endpoint != packet->message_type.endpoints[i])
                 {
-                    return SEDSPRINTF_ERROR;
+                    if (cfg.transmit_helpers[j](&serialized) != SEDSPRINTF_OK)
+                    {
+                        return SEDSPRINTF_ERROR;
+                    }
+                    transmitted = 1;
                 }
             }
         }
         //local save loop
         //handle all local endpoints
-        for (size_t j = 0; j < board_config.num_endpoints; j++)
+        for (size_t j = 0; j < cfg.board_config.num_endpoints; j++)
         {
-            if (board_config.data_endpoints[j].receive_handler != nullptr &&
-                board_config.data_endpoints[j].endpoint == packet->message_type.endpoints[i])
+            if (cfg.board_config.data_endpoints[j].receive_handler != nullptr &&
+                cfg.board_config.data_endpoints[j].endpoint == packet->message_type.endpoints[i])
             {
-                if (board_config.data_endpoints[j].receive_handler() != SEDSPRINTF_OK)
+                if (cfg.board_config.data_endpoints[j].receive_handler(packet) != SEDSPRINTF_OK)
                 {
                     return SEDSPRINTF_ERROR;
                 }
@@ -54,18 +88,19 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
     return SEDSPRINTF_OK;
 }
 
-SEDSPRINTF_STATUS sedsprintf::receive(const telemetry_packet_t * packet)
+SEDSPRINTF_STATUS sedsprintf::receive(const serialized_buffer_t * serialized_buffer) const
 {
-    if (packet->message_type.num_endpoints == 0)
+    telemetry_packet_t packet = deserialize_packet(serialized_buffer);
+    if (packet.message_type.num_endpoints == 0)
         return SEDSPRINTF_OK;
-    for (size_t i = 0; i < packet->message_type.num_endpoints; i++)
+    for (size_t i = 0; i < packet.message_type.num_endpoints; i++)
     {
-        for (size_t j = 0; j < board_config.num_endpoints; j++)
+        for (size_t j = 0; j < cfg.board_config.num_endpoints; j++)
         {
-            if (board_config.data_endpoints[j].receive_handler != nullptr &&
-                board_config.data_endpoints[j].endpoint == packet->message_type.endpoints[i])
+            if (cfg.board_config.data_endpoints[j].receive_handler != nullptr &&
+                cfg.board_config.data_endpoints[j].endpoint == packet.message_type.endpoints[i])
             {
-                if (board_config.data_endpoints[j].receive_handler() != SEDSPRINTF_OK)
+                if (cfg.board_config.data_endpoints[j].receive_handler(&packet) != SEDSPRINTF_OK)
                 {
                     return SEDSPRINTF_ERROR;
                 }

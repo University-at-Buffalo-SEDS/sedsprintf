@@ -3,9 +3,6 @@
 #define SEDSPRINTF_CONFIG_H
 
 
-
-
-
 // =========================== USER-EDITABLE SECTION ==========================
 // Put ALL user-editable types here.
 

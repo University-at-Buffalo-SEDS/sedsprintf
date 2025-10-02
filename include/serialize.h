@@ -4,6 +4,7 @@
 
 #ifndef SEDSPRINTF_SERIALIZE_H
 #define SEDSPRINTF_SERIALIZE_H
+// ReSharper disable once CppUnusedIncludeDirective
 #include <cstdint>
 #include "struct_setup.h"
 

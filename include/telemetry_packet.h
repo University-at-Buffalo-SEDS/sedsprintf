@@ -11,7 +11,9 @@
 //-----------------------------------------------------------------------------
 //
 // DESCRIPTION:
-//    this defines the necessary structures for a telemetry packet
+//    This defines the necessary custom data types for a telemetry packet.
+//    Nothing in this file should need to be user-edited.
+//
 //
 //*****************************************************************************
 //

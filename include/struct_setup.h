@@ -11,7 +11,9 @@
 //-----------------------------------------------------------------------------
 //
 // DESCRIPTION:
-//    <ENTER-FILE-DESCRIPTION>
+//    This file is for setting up the structures needed for the telemetry library to function correctly.
+//    This includes setting up the endpoints for each message type, the size of each message type, and an example board configuration.
+//    This file is intended to be user-editable to allow for easy configuration of the telemetry system.
 //
 //*****************************************************************************
 //
@@ -20,8 +22,8 @@
 
 #ifndef SEDSPRINTF_STRUCT_SETUP_H
 #define SEDSPRINTF_STRUCT_SETUP_H
-
-#include <stdint.h> // integer types
+// ReSharper disable once CppUnusedIncludeDirective
+#include <cstdint>
 
 #include "telemetry_packet.h"
 // ========================= DO NOT EDIT THIS SECTION =========================

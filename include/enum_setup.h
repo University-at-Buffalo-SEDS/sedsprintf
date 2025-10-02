@@ -1,4 +1,10 @@
-// config.h
+// Description: This file contains enum definitions and their string representations
+//              for configuring the telemetry system. Users can add new data types and
+//              endpoints as needed.
+//              This file is intended to be user-editable to allow for easy configuration of the telemetry system.
+//*****************************************************************************
+//
+
 #ifndef SEDSPRINTF_CONFIG_H
 #define SEDSPRINTF_CONFIG_H
 #include <string>

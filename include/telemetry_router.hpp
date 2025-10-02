@@ -10,7 +10,6 @@
 #include <vector>
 
 
-
 #define MAX_PRECISION 12
 
 typedef SEDSPRINTF_STATUS (* transmit_helper_t)(serialized_buffer_t * serialized_packet);

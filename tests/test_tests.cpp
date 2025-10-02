@@ -74,6 +74,7 @@ TEST(TelemetryRouterTest, HandlesDataFlow)
             sd_card_data.message_type.data_size),
         0);
 }
+
 //this function is an example of how to use a switch case to make a global tostring that can be used on any packet and will return the string for it.
 std::string example_tostring_for_any_packet(const telemetry_packet_t * packet)
 {
@@ -88,9 +89,9 @@ std::string example_tostring_for_any_packet(const telemetry_packet_t * packet)
 
         case NUM_DATA_TYPES:
             //we should never ever ever hit this case because if the type is this then something was done very, very wrong
-        return "Your data type is set to NUM_DATA_TYPES. This should never happen and is most likely unrecoverable. "
-               "Please fix your code";
-
+            return
+                    "Your data type is set to NUM_DATA_TYPES. This should never happen and is most likely unrecoverable. "
+                    "Please fix your code";
     }
     return "Not sure how you got here, but something went catastrophically wrong";
 }

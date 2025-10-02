@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+// ReSharper disable once CppUnusedIncludeDirective
 #include <cstring>
 
 
@@ -33,7 +34,7 @@ public:
 
     // Pointer + count (e.g., float*, count)
     template<typename T>
-    static SEDSPRINTF_STATUS get_data_from_packet(const telemetry_packet_t * packet, T * out, size_t count)
+    static SEDSPRINTF_STATUS get_data_from_packet(const telemetry_packet_t * packet, T * out, const size_t count)
     {
         if (!packet || !packet->data || !out) return SEDSPRINTF_ERROR;
         const size_t need = sizeof(T) * count;
@@ -54,7 +55,7 @@ public:
     }
 
     //to string functions
-    // 1) Deduce count from packet->message_type.data_size
+    // Deduce count from packet->message_type.data_size
     template<typename T>
     static std::string packet_to_string(const telemetry_packet_t * packet, const T * data)
     {
@@ -88,7 +89,7 @@ public:
         return os.str();
     }
 
-    // 2) Convenience: read directly from packet->data (no external buffer)
+    //read directly from packet->data (no external buffer)
     template<typename T>
     static std::string packet_to_string(const telemetry_packet_t * packet)
     {
@@ -98,7 +99,7 @@ public:
         return packet_to_string<T>(packet, data);
     }
 
-    // 3) Nice extras: std::array and std::vector overloads
+    //std::array and std::vector overloads
     template<typename T, size_t N>
     static std::string packet_to_string(const telemetry_packet_t * packet, const std::array<T, N> & arr)
     {
@@ -184,7 +185,7 @@ public:
 
     sedsprintf(transmit_helper_t transmit_helpers[], size_t num_helpers, board_config_t config);
 
-    SEDSPRINTF_STATUS log(message_type_t, void * data) const;
+    SEDSPRINTF_STATUS log(const message_type_t &, void * data) const;
 
     static SEDSPRINTF_STATUS copy_telemetry_packet(telemetry_packet_t * dest, const telemetry_packet_t * src);
 

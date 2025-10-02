@@ -1,5 +1,4 @@
 #include "telemetry_router.hpp"
-#include <cstring>
 #include "serialize.h"
 
 std::string sedsprintf::telemetry_packet_metadata_to_string(const telemetry_packet_t * packet)
@@ -26,7 +25,7 @@ std::string sedsprintf::packet_to_hex_string(const telemetry_packet_t * packet,
     std::ostringstream os;
     os << telemetry_packet_metadata_to_string(packet) << ", Payload (hex): ";
 
-    const uint8_t * p = static_cast<const uint8_t *>(data);
+    const auto * p = static_cast<const uint8_t *>(data);
     os << std::hex << std::setfill('0');
     for (size_t i = 0; i < size_bytes; ++i)
     {
@@ -62,7 +61,7 @@ sedsprintf::sedsprintf(transmit_helper_t transmit_helpers[], size_t num_helpers,
     this->cfg.board_config = config;
 }
 
-SEDSPRINTF_STATUS sedsprintf::log(message_type_t type, void * data) const
+SEDSPRINTF_STATUS sedsprintf::log(const message_type_t & type, void * data) const
 {
     telemetry_packet_t packet{};
     packet.message_type = type;

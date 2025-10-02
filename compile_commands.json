@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf",
+  "command": "/Library/Developer/CommandLineTools/usr/bin/c++ -I\"/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/src/../include\" -std=gnu++17 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.0.sdk -o src/CMakeFiles/sedsprintf.dir/telemetry_router.cpp.o -c \"/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/src/telemetry_router.cpp\"",
+  "file": "/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/src/telemetry_router.cpp",
+  "output": "src/CMakeFiles/sedsprintf.dir/telemetry_router.cpp.o"
+}
+]

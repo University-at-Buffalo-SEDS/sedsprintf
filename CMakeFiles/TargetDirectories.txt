@@ -1,0 +1,7 @@
+/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/CMakeFiles/test.dir
+/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/CMakeFiles/edit_cache.dir
+/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/CMakeFiles/rebuild_cache.dir
+/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/src/CMakeFiles/sedsprintf.dir
+/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/src/CMakeFiles/test.dir
+/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/src/CMakeFiles/edit_cache.dir
+/Users/kashfygazi/Documents/UB SEDS/Avionics/Software Git Repos/sedsprintf/src/CMakeFiles/rebuild_cache.dir

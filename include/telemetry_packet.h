@@ -2,6 +2,7 @@
 #define SEDSPRINTF_TELEMETRY_PACKET_H
 
 #include "enum_setup.h"
+// ReSharper disable once CppUnusedIncludeDirective
 #include <cstddef>
 #include <ctime>
 #include <memory>

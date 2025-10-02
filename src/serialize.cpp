@@ -1,6 +1,6 @@
 #include "serialize.h"
 #include <cstring>
-#include <type_traits>
+// ReSharper disable once CppUnusedIncludeDirective
 #include <cstdint>
 #include <memory>
 

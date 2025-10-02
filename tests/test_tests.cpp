@@ -20,7 +20,7 @@ telemetry_packet_t transmit_data = {
     .timestamp = 0,
     .data = tx_buff
 };
-
+// SD card receive handler (in real life, this would write the data to the sd card, it would also probably utilize the to_string methods to format the data.)
 SEDSPRINTF_STATUS sd_card_handler(telemetry_packet_t * buffer)
 {
     sedsprintf::copy_telemetry_packet(&sd_card_data, buffer);
@@ -28,7 +28,7 @@ SEDSPRINTF_STATUS sd_card_handler(telemetry_packet_t * buffer)
     return SEDSPRINTF_OK;
 }
 
-
+// Transmit helper (in real life, this would send the data over the bus of our choosing, for the foreseeable future this would be the can bus)
 SEDSPRINTF_STATUS transmit_helper(serialized_buffer_t * data)
 {
     telemetry_packet_t packet = deserialize_packet(data);
@@ -37,7 +37,7 @@ SEDSPRINTF_STATUS transmit_helper(serialized_buffer_t * data)
     return SEDSPRINTF_OK;
 }
 
-
+// Board config for testing (has sd card only)
 static board_config_t board_config = {
     // Define the data endpoints available on this board
     .local_data_endpoints = (data_endpoint_handler_t[]){
@@ -122,7 +122,7 @@ TEST(SerializationTest, HandlesSerializationAndDeserialization)
     ASSERT_EQ(test_packet.message_type.data_size, sizeof(data));
 }
 
-
+//test that the headers tostring works correcly
 TEST(HeaderToStringTest, ToStringWorks)
 {
     float data[message_elements[GPS_DATA]] = {5.214141324324f, 3.1342143243214132f, 1.123123123123f};
@@ -138,7 +138,7 @@ TEST(HeaderToStringTest, ToStringWorks)
     EXPECT_EQ(header_str, expected_str);
 }
 
-
+//check that the tostring for the headers and data works correctly
 TEST(PacketToStringTest, ToStringWorks)
 {
     float data[message_elements[GPS_DATA]] = {5.214141324324, 3.134214324321, 1.123123123123};

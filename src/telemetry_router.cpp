@@ -1,6 +1,27 @@
 #include "telemetry_router.hpp"
 #include "serialize.h"
 
+SEDSPRINTF_STATUS sedsprintf::validate_telemetry_packet(const telemetry_packet_t * packet)
+{
+    if (!packet) return SEDSPRINTF_ERROR;
+    if (packet->message_type.type < 0 || packet->message_type.type >= NUM_DATA_TYPES)
+        return SEDSPRINTF_ERROR;
+    if (packet->message_type.data_size != message_size[packet->message_type.type])
+        return SEDSPRINTF_ERROR;
+    if (packet->message_type.num_endpoints == 0 || !packet->message_type.endpoints)
+        return SEDSPRINTF_ERROR;
+    if (packet->timestamp == -1)
+        return SEDSPRINTF_ERROR;
+    for (size_t i = 0; i < packet->message_type.num_endpoints; ++i)
+    {
+        if (packet->message_type.endpoints[i] < 0 || packet->message_type.endpoints[i] >= NUM_DATA_ENDPOINTS)
+            return SEDSPRINTF_ERROR;
+    }
+    if (packet->message_type.data_size > 0 && !packet->data)
+        return SEDSPRINTF_ERROR;
+    return SEDSPRINTF_OK;
+}
+
 std::string sedsprintf::telemetry_packet_metadata_to_string(const telemetry_packet_t * packet)
 {
     std::string type = message_names[packet->message_type.type];

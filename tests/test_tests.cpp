@@ -23,17 +23,21 @@ telemetry_packet_t transmit_data = {
 // SD card receive handler (in practice, this would write the data to the sd card, it would also probably utilize the to_string methods to format the data.)
 SEDSPRINTF_STATUS sd_card_handler(telemetry_packet_t * packet)
 {
-    sedsprintf::copy_telemetry_packet(&sd_card_data, packet);
     sd_card_called = 1;
+    sedsprintf::copy_telemetry_packet(&sd_card_data, packet);
     return SEDSPRINTF_OK;
 }
 
 // Transmit helper (in practice, this would send the data over the bus of our choosing, for the foreseeable future this would be the can bus)
 SEDSPRINTF_STATUS transmit_helper(serialized_buffer_t * serialized_buffer)
 {
+    transmit_called = 1;
     telemetry_packet_t packet = deserialize_packet(serialized_buffer);
     sedsprintf::copy_telemetry_packet(&transmit_data, &packet);
-    transmit_called = 1;
+    if (sedsprintf::validate_telemetry_packet(&packet) != SEDSPRINTF_OK)
+    {
+        return SEDSPRINTF_ERROR;
+    }
     return SEDSPRINTF_OK;
 }
 
@@ -62,7 +66,8 @@ TEST(TelemetryRouterTest, HandlesDataFlow)
 
     ASSERT_EQ(sd_card_called, 1);
     ASSERT_EQ(transmit_called, 1);
-
+    ASSERT_EQ(sedsprintf::validate_telemetry_packet(&sd_card_data), SEDSPRINTF_OK);
+    ASSERT_EQ(sedsprintf::validate_telemetry_packet(&transmit_data), SEDSPRINTF_OK);
     ASSERT_EQ(sd_card_data.message_type.type, transmit_data.message_type.type);
     ASSERT_EQ(sd_card_data.timestamp, transmit_data.timestamp);
     ASSERT_NE(sd_card_data.data, nullptr);
@@ -111,13 +116,17 @@ TEST(SerializationTest, HandlesSerializationAndDeserialization)
     serialized_buffer_t serialized = create_serialized_buffer(buff, size);
     ASSERT_GT(serialized.size, 0u);
 
-    serialize_packet(&test_packet, &serialized);
+    SEDSPRINTF_STATUS status = serialize_packet(&test_packet, &serialized);
+
+    ASSERT_EQ(status, SEDSPRINTF_OK);
 
     // Assert basic buffer sanity
     ASSERT_NE(serialized.buffer, nullptr);
     ASSERT_EQ(serialized.size, serialized.size);
 
     telemetry_packet_t deserialized = deserialize_packet(&serialized);
+
+    ASSERT_EQ(sedsprintf::validate_telemetry_packet(&deserialized), SEDSPRINTF_OK);
 
     // Assert header fields
     EXPECT_EQ(deserialized.message_type.type, test_packet.message_type.type);

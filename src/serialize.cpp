@@ -46,6 +46,12 @@ SEDSPRINTF_STATUS serialize_packet(const telemetry_packet_t * packet, const seri
     memcpy(p, &packet->message_type.data_size, sizeof(packet->message_type.data_size));
     p += sizeof(packet->message_type.data_size);
 
+    memcpy(p, &packet->message_type.endpoints, sizeof(packet->message_type.endpoints));
+    p += sizeof(packet->message_type.endpoints);
+
+    memcpy(p, &packet->message_type.num_endpoints, sizeof(packet->message_type.num_endpoints));
+    p += sizeof(packet->message_type.num_endpoints);
+
     memcpy(p, &packet->timestamp, sizeof(packet->timestamp));
     p += sizeof(packet->timestamp);
 
@@ -59,7 +65,9 @@ SEDSPRINTF_STATUS serialize_packet(const telemetry_packet_t * packet, const seri
 
 telemetry_packet_t deserialize_packet(const serialized_buffer_t * serialized_buffer)
 {
-    telemetry_packet_t pkt{};
+    telemetry_packet_t pkt{
+        {}, -1, nullptr
+    };
     if (!serialized_buffer || !serialized_buffer->buffer) return pkt;
 
     const uint8_t * p = serialized_buffer->buffer;
@@ -77,6 +85,12 @@ telemetry_packet_t deserialize_packet(const serialized_buffer_t * serialized_buf
     memcpy(&pkt.message_type.data_size, p, sizeof(pkt.message_type.data_size));
     p += sizeof(pkt.message_type.data_size);
 
+    memcpy(&pkt.message_type.endpoints, p, sizeof(pkt.message_type.endpoints));
+    p += sizeof(pkt.message_type.endpoints);
+
+    memcpy(&pkt.message_type.num_endpoints, p, sizeof(pkt.message_type.num_endpoints));
+    p += sizeof(pkt.message_type.num_endpoints);
+
     memcpy(&pkt.timestamp, p, sizeof(pkt.timestamp));
     p += sizeof(pkt.timestamp);
 
@@ -90,10 +104,6 @@ telemetry_packet_t deserialize_packet(const serialized_buffer_t * serialized_buf
 
     // Zero-copy payload view
     pkt.data = (void *) p;
-
-    // Endpoints are board-local and not serialized
-    pkt.message_type.endpoints = nullptr;
-    pkt.message_type.num_endpoints = 0;
 
     return pkt;
 }

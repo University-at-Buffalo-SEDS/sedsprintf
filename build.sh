@@ -43,7 +43,7 @@ cmake --build build
 
 if [[ "$BUILD_TESTS" == "ON" ]]; then
   echo "Running tests..."
-  ctest --test-dir build --verbose
+  ctest --test-dir build --verbose --output-on-failure
 fi
 
 echo "Build complete."

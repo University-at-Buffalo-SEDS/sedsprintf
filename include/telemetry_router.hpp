@@ -191,6 +191,8 @@ public:
 
     static std::string telemetry_packet_metadata_to_string(const telemetry_packet_t * packet);
 
+    static SEDSPRINTF_STATUS validate_telemetry_packet(const telemetry_packet_t * packet);
+
 private:
     SEDSPRINTF_STATUS transmit(telemetry_packet_t * packet) const;
 

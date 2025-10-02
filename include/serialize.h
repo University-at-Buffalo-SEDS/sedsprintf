@@ -19,7 +19,7 @@ size_t get_packet_size(const telemetry_packet_t * packet);
 
 serialized_buffer_t create_serialized_buffer(uint8_t buff[], size_t size);
 
-void serialize_packet(const telemetry_packet_t * packet, const serialized_buffer_t * buffer);
+SEDSPRINTF_STATUS serialize_packet(const telemetry_packet_t * packet, const serialized_buffer_t * buffer);
 
 telemetry_packet_t deserialize_packet(const serialized_buffer_t * serialized_buffer);
 #endif //SEDSPRINTF_SERIALIZE_H

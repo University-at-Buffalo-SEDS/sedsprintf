@@ -25,9 +25,9 @@ serialized_buffer_t create_serialized_buffer(uint8_t buff[], const size_t size)
     return out;
 }
 
-void serialize_packet(const telemetry_packet_t * packet, const serialized_buffer_t * buffer)
+SEDSPRINTF_STATUS serialize_packet(const telemetry_packet_t * packet, const serialized_buffer_t * buffer)
 {
-    if (!packet || !buffer || !buffer->buffer) return;
+    if (!packet || !buffer || !buffer->buffer) return SEDSPRINTF_ERROR;
 
     const size_t need =
             sizeof(packet->message_type.type) +
@@ -35,7 +35,7 @@ void serialize_packet(const telemetry_packet_t * packet, const serialized_buffer
             sizeof(packet->timestamp) +
             packet->message_type.data_size;
 
-    if (buffer->size < need) return; // not enough space
+    if (buffer->size < need) return SEDSPRINTF_ERROR; // not enough space
 
     uint8_t * p = buffer->buffer;
 
@@ -54,6 +54,7 @@ void serialize_packet(const telemetry_packet_t * packet, const serialized_buffer
     {
         memcpy(p, packet->data, packet->message_type.data_size);
     }
+    return SEDSPRINTF_OK;
 }
 
 telemetry_packet_t deserialize_packet(const serialized_buffer_t * serialized_buffer)

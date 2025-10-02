@@ -14,7 +14,7 @@ SEDSPRINTF_STATUS sedsprintf::copy_telemetry_packet(telemetry_packet_t * dest, c
     dest->timestamp = src->timestamp;
     if (src->message_type.data_size > 0 && src->data)
     {
-        //check buffer        size?
+        //check buffer size?
         if (dest->data == nullptr || dest->message_type.data_size < src->message_type.data_size)
         {
             return SEDSPRINTF_ERROR;
@@ -61,7 +61,7 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
             {
                 //transmit all remote endpoints
                 if (cfg.transmit_helpers[j] != nullptr &&
-                    cfg.board_config.data_endpoints[j].endpoint != packet->message_type.endpoints[i])
+                    cfg.board_config.local_data_endpoints[j].endpoint != packet->message_type.endpoints[i])
                 {
                     if (cfg.transmit_helpers[j](&serialized) != SEDSPRINTF_OK)
                     {
@@ -75,10 +75,10 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
         //handle all local endpoints
         for (size_t j = 0; j < cfg.board_config.num_endpoints; j++)
         {
-            if (cfg.board_config.data_endpoints[j].receive_handler != nullptr &&
-                cfg.board_config.data_endpoints[j].endpoint == packet->message_type.endpoints[i])
+            if (cfg.board_config.local_data_endpoints[j].receive_handler != nullptr &&
+                cfg.board_config.local_data_endpoints[j].endpoint == packet->message_type.endpoints[i])
             {
-                if (cfg.board_config.data_endpoints[j].receive_handler(packet) != SEDSPRINTF_OK)
+                if (cfg.board_config.local_data_endpoints[j].receive_handler(packet) != SEDSPRINTF_OK)
                 {
                     return SEDSPRINTF_ERROR;
                 }
@@ -97,10 +97,10 @@ SEDSPRINTF_STATUS sedsprintf::receive(const serialized_buffer_t * serialized_buf
     {
         for (size_t j = 0; j < cfg.board_config.num_endpoints; j++)
         {
-            if (cfg.board_config.data_endpoints[j].receive_handler != nullptr &&
-                cfg.board_config.data_endpoints[j].endpoint == packet.message_type.endpoints[i])
+            if (cfg.board_config.local_data_endpoints[j].receive_handler != nullptr &&
+                cfg.board_config.local_data_endpoints[j].endpoint == packet.message_type.endpoints[i])
             {
-                if (cfg.board_config.data_endpoints[j].receive_handler(&packet) != SEDSPRINTF_OK)
+                if (cfg.board_config.local_data_endpoints[j].receive_handler(&packet) != SEDSPRINTF_OK)
                 {
                     return SEDSPRINTF_ERROR;
                 }

@@ -70,7 +70,7 @@ static const message_type_t message_type[] = {
 //these should be changed to the correct config for each board
 static const board_config_t example_board_config = {
     // Define the data endpoints available on this board
-    .data_endpoints = (data_endpoint_handler_t[]){
+    .local_data_endpoints = (data_endpoint_handler_t[]){
         {SD_CARD, nullptr}, // SD_CARD does not have a receive handler
         {RADIO, nullptr}, // RADIO does not have a receive handler
     },

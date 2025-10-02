@@ -40,7 +40,7 @@ SEDSPRINTF_STATUS transmit_helper(serialized_buffer_t * data)
 
 static board_config_t board_config = {
     // Define the data endpoints available on this board
-    .data_endpoints = (data_endpoint_handler_t[]){
+    .local_data_endpoints = (data_endpoint_handler_t[]){
         {SD_CARD, sd_card_handler}, // setup the sd receive handler
     },
     .num_endpoints = 1 // Number of endpoints defined above

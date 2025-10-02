@@ -61,7 +61,7 @@ typedef struct
 // Board-wide configuration (what endpoints exist, etc.)
 typedef struct
 {
-    const data_endpoint_handler_t * data_endpoints;
+    const data_endpoint_handler_t * local_data_endpoints;
     size_t num_endpoints;
 } board_config_t;
 

@@ -1,6 +1,7 @@
 // config.h
 #ifndef SEDSPRINTF_CONFIG_H
 #define SEDSPRINTF_CONFIG_H
+#include <string>
 
 
 // =========================== USER-EDITABLE SECTION ==========================
@@ -15,6 +16,11 @@ typedef enum
     NUM_DATA_ENDPOINTS
 } data_endpoint_t;
 
+static const std::string data_endpoint_names[NUM_DATA_ENDPOINTS] = {
+    "SD_CARD",
+    "RADIO",
+};
+
 typedef enum
 {
     // Add all possible message types here
@@ -26,6 +32,13 @@ typedef enum
     NUM_DATA_TYPES // Always keep this as the last entry
 } data_type_t;
 
-// ========================= END USER-EDITABLE SECTION ========================
+static const std::string message_names[NUM_DATA_TYPES] = {
+    "GPS_DATA",
+    "IMU_DATA",
+    "BATTERY_STATUS",
+    "SYSTEM_STATUS",
 
+};
+
+// ========================= END USER-EDITABLE SECTION ========================
 #endif // SEDSPRINTF_CONFIG_H

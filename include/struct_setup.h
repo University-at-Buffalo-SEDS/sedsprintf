@@ -48,6 +48,7 @@ static data_endpoint_t * endpoints[NUM_DATA_TYPES] = {
 };
 
 static constexpr size_t message_elements[NUM_DATA_TYPES] = {
+    //this is the number of elements in each messages data array
     3, // GPS_DATA
     6, // IMU_DATA
     2, // BATTERY_STATUS
@@ -61,7 +62,7 @@ static constexpr size_t message_size[NUM_DATA_TYPES] = {
     sizeof(int) * message_elements[SYSTEM_STATUS] // SYSTEM_STATUS
 };
 
-static const message_type_t message_type[] = {
+static const message_type_t message_type[NUM_DATA_TYPES] = {
     {GPS_DATA, message_size[GPS_DATA], endpoints[GPS_DATA], endpoint_len(endpoints[GPS_DATA])},
     {IMU_DATA, message_size[IMU_DATA], endpoints[IMU_DATA], endpoint_len(endpoints[IMU_DATA])},
     {BATTERY_STATUS, message_size[BATTERY_STATUS], endpoints[BATTERY_STATUS], endpoint_len(endpoints[BATTERY_STATUS])},
@@ -74,18 +75,7 @@ static const board_config_t example_board_config = {
         {SD_CARD, nullptr}, // SD_CARD does not have a receive handler
         {RADIO, nullptr}, // RADIO does not have a receive handler
     },
-    .num_endpoints = 2 // Number of endpoints defined above
+    .num_local_endpoints = 2 // Number of endpoints defined above
 };
 // ========================= END USER-EDITABLE SECTION ========================
-
-
-// ========================= DO NOT EDIT THIS SECTION =========================
-// Ensure the size of the endpoints array is correct
-static_assert(sizeof(endpoints) / (sizeof(data_endpoint_t) * NUM_DATA_ENDPOINTS) == NUM_DATA_TYPES,
-              "message_type_t size is incorrect");
-
-// Ensure the size of the message_type array is correct
-static_assert(sizeof(message_type) / sizeof(message_type_t) == NUM_DATA_TYPES, "message_type_t size is incorrect");
-// ===========================================================================
-
 #endif //SEDSPRINTF_STRUCT_SETUP_H

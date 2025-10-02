@@ -1,9 +1,19 @@
 #include "telemetry_router.hpp"
-
-#include <cstdint>
 #include <cstring>
 
 #include "serialize.h"
+std::string sedsprintf::telemetry_packet_metadata_to_string(const telemetry_packet_t * packet)
+{
+    std::string type = message_names[packet->message_type.type];
+    std::string dest_endpoints;
+    for (size_t i = 0; i < packet->message_type.num_endpoints; i++)
+    {
+        dest_endpoints += (i == 0 ? "" : ", ") + data_endpoint_names[packet->message_type.endpoints[i]];
+    }
+    return "Type: " + type + ", Size: " + std::to_string(packet->message_type.data_size) +
+           ", Endpoints: [" + dest_endpoints + "], Timestamp: " + std::to_string(packet->timestamp);
+}
+
 
 SEDSPRINTF_STATUS sedsprintf::copy_telemetry_packet(telemetry_packet_t * dest, const telemetry_packet_t * src)
 {
@@ -61,7 +71,7 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
             {
                 //transmit all remote endpoints
                 if (cfg.transmit_helpers[j] != nullptr &&
-                    cfg.board_config.local_data_endpoints[j].endpoint != packet->message_type.endpoints[i])
+                    cfg.board_config.local_data_endpoints[j].local_endpoint != packet->message_type.endpoints[i])
                 {
                     if (cfg.transmit_helpers[j](&serialized) != SEDSPRINTF_OK)
                     {
@@ -73,10 +83,10 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
         }
         //local save loop
         //handle all local endpoints
-        for (size_t j = 0; j < cfg.board_config.num_endpoints; j++)
+        for (size_t j = 0; j < cfg.board_config.num_local_endpoints; j++)
         {
             if (cfg.board_config.local_data_endpoints[j].receive_handler != nullptr &&
-                cfg.board_config.local_data_endpoints[j].endpoint == packet->message_type.endpoints[i])
+                cfg.board_config.local_data_endpoints[j].local_endpoint == packet->message_type.endpoints[i])
             {
                 if (cfg.board_config.local_data_endpoints[j].receive_handler(packet) != SEDSPRINTF_OK)
                 {
@@ -95,10 +105,10 @@ SEDSPRINTF_STATUS sedsprintf::receive(const serialized_buffer_t * serialized_buf
         return SEDSPRINTF_OK;
     for (size_t i = 0; i < packet.message_type.num_endpoints; i++)
     {
-        for (size_t j = 0; j < cfg.board_config.num_endpoints; j++)
+        for (size_t j = 0; j < cfg.board_config.num_local_endpoints; j++)
         {
             if (cfg.board_config.local_data_endpoints[j].receive_handler != nullptr &&
-                cfg.board_config.local_data_endpoints[j].endpoint == packet.message_type.endpoints[i])
+                cfg.board_config.local_data_endpoints[j].local_endpoint == packet.message_type.endpoints[i])
             {
                 if (cfg.board_config.local_data_endpoints[j].receive_handler(&packet) != SEDSPRINTF_OK)
                 {

@@ -2,6 +2,7 @@
 #define SEDSPRINTF_LIBRARY_H
 #include "serialize.h"
 #include "struct_setup.h"
+#include <string>
 
 typedef SEDSPRINTF_STATUS (* transmit_helper_t)(serialized_buffer_t * serialized_packet);
 
@@ -20,6 +21,8 @@ public:
     SEDSPRINTF_STATUS log(message_type_t, void * data) const;
 
     static SEDSPRINTF_STATUS copy_telemetry_packet(telemetry_packet_t * dest, const telemetry_packet_t * src);
+
+    static std::string telemetry_packet_metadata_to_string(const telemetry_packet_t * packet);
 
 private:
     SEDSPRINTF_STATUS transmit(telemetry_packet_t * packet) const;

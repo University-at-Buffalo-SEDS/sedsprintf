@@ -43,7 +43,7 @@ static board_config_t board_config = {
     .local_data_endpoints = (data_endpoint_handler_t[]){
         {SD_CARD, sd_card_handler}, // setup the sd receive handler
     },
-    .num_endpoints = 1 // Number of endpoints defined above
+    .num_local_endpoints = 1 // Number of endpoints defined above
 };
 //============================================================================
 
@@ -119,4 +119,20 @@ TEST(SerializationTest, HandlesSerializationAndDeserialization)
     ASSERT_EQ(local_data[1], received_data[1]);
     ASSERT_EQ(local_data[2], received_data[2]);
     ASSERT_EQ(test_packet.message_type.data_size, sizeof(data));
+}
+
+
+TEST(HeaderToStringTest, ToStringWorks)
+{
+    float data[message_elements[GPS_DATA]] = {5.214141324324f, 3.1342143243214132f, 1.123123123123f};
+
+    telemetry_packet_t test_packet = {
+        .message_type = message_type[GPS_DATA], // must have .data_size == sizeof(data)
+        .timestamp = 0,
+        .data = data
+    };
+
+    std::string header_str = sedsprintf::telemetry_packet_metadata_to_string(&test_packet);
+    std::string expected_str = "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0";
+    EXPECT_EQ(header_str, expected_str);
 }

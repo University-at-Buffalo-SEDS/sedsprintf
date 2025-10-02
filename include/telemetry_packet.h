@@ -54,7 +54,7 @@ typedef SEDSPRINTF_STATUS (* receive_helper_t)(telemetry_packet_t * buffer);
 
 typedef struct
 {
-    data_endpoint_t endpoint;
+    data_endpoint_t local_endpoint;
     receive_helper_t receive_handler; // set NULL if unused
 } data_endpoint_handler_t;
 
@@ -62,7 +62,7 @@ typedef struct
 typedef struct
 {
     const data_endpoint_handler_t * local_data_endpoints;
-    size_t num_endpoints;
+    size_t num_local_endpoints;
 } board_config_t;
 
 // ===========================================================================

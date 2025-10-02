@@ -44,7 +44,7 @@ SEDSPRINTF_STATUS sedsprintf::copy_telemetry_packet(telemetry_packet_t * dest, c
     dest->timestamp = src->timestamp;
     if (src->message_type.data_size > 0 && src->data)
     {
-        //check buffer size?
+        //check buffer size before copying
         if (dest->data == nullptr || dest->message_type.data_size < src->message_type.data_size)
         {
             return SEDSPRINTF_ERROR;

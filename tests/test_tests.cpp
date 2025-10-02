@@ -74,7 +74,26 @@ TEST(TelemetryRouterTest, HandlesDataFlow)
             sd_card_data.message_type.data_size),
         0);
 }
+//this function is an example of how to use a switch case to make a global tostring that can be used on any packet and will return the string for it.
+std::string example_tostring_for_any_packet(const telemetry_packet_t * packet)
+{
+    switch (packet->message_type.type)
+    {
+        case GPS_DATA:
+        case IMU_DATA:
+        case BATTERY_STATUS:
+            return sedsprintf::packet_to_string<float>(packet);
+        case SYSTEM_STATUS:
+            return sedsprintf::packet_to_string<int>(packet);
 
+        case NUM_DATA_TYPES:
+            //we should never ever ever hit this case because if the type is this then something was done very, very wrong
+        return "Your data type is set to NUM_DATA_TYPES. This should never happen and is most likely unrecoverable. "
+               "Please fix your code";
+
+    }
+    return "Not sure how you got here, but something went catastrophically wrong";
+}
 
 // Test that serialization and deserialization work correctly
 TEST(SerializationTest, HandlesSerializationAndDeserialization)
@@ -148,10 +167,7 @@ TEST(PacketToStringTest, ToStringWorks)
         .timestamp = 0,
         .data = data
     };
-    float packet_data[message_elements[GPS_DATA]];
-    sedsprintf::get_data_from_packet(&test_packet, packet_data);
-    const std::string packet_string = sedsprintf::packet_to_string(&test_packet, packet_data,
-                                                                   message_elements[GPS_DATA]);
+    const std::string packet_string = example_tostring_for_any_packet(&test_packet);
     std::ostringstream expected;
     expected.setf(std::ios::fixed, std::ios::floatfield);
     expected << "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0, Data: ";

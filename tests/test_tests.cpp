@@ -7,31 +7,31 @@
 uint8_t sd_card_called = 0;
 uint8_t transmit_called = 0;
 
-float sd_buff[message_size[GPS_DATA]];
-float tx_buff[message_size[GPS_DATA]];
+float sd_buff[message_size[GPS_DATA]]; // use the existing structures to define the buffers
+float tx_buff[message_size[GPS_DATA]]; // use the existing structures to define the buffers
 
 telemetry_packet_t sd_card_data = {
-    .message_type = message_type[GPS_DATA], // must have .data_size == sizeof(data)
+    .message_type = message_type[GPS_DATA],
     .timestamp = 0,
-    .data = sd_buff
+    .data = sd_buff // buffer must already exist and be properly sized
 };
 telemetry_packet_t transmit_data = {
-    .message_type = message_type[GPS_DATA], // must have .data_size == sizeof(data)
+    .message_type = message_type[GPS_DATA],
     .timestamp = 0,
-    .data = tx_buff
+    .data = tx_buff // buffer must already exist and be properly sized
 };
-// SD card receive handler (in real life, this would write the data to the sd card, it would also probably utilize the to_string methods to format the data.)
-SEDSPRINTF_STATUS sd_card_handler(telemetry_packet_t * buffer)
+// SD card receive handler (in practice, this would write the data to the sd card, it would also probably utilize the to_string methods to format the data.)
+SEDSPRINTF_STATUS sd_card_handler(telemetry_packet_t * packet)
 {
-    sedsprintf::copy_telemetry_packet(&sd_card_data, buffer);
+    sedsprintf::copy_telemetry_packet(&sd_card_data, packet);
     sd_card_called = 1;
     return SEDSPRINTF_OK;
 }
 
-// Transmit helper (in real life, this would send the data over the bus of our choosing, for the foreseeable future this would be the can bus)
-SEDSPRINTF_STATUS transmit_helper(serialized_buffer_t * data)
+// Transmit helper (in practice, this would send the data over the bus of our choosing, for the foreseeable future this would be the can bus)
+SEDSPRINTF_STATUS transmit_helper(serialized_buffer_t * serialized_buffer)
 {
-    telemetry_packet_t packet = deserialize_packet(data);
+    telemetry_packet_t packet = deserialize_packet(serialized_buffer);
     sedsprintf::copy_telemetry_packet(&transmit_data, &packet);
     transmit_called = 1;
     return SEDSPRINTF_OK;

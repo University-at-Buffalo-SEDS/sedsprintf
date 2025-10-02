@@ -7,10 +7,6 @@
 #include "serialize.h"
 #include "telemetry_router.hpp"
 
-// Aliases
-using PacketPtr = std::shared_ptr<telemetry_packet_t>;
-using ConstPacketPtr = std::shared_ptr<const telemetry_packet_t>;
-
 // ========================== helpers ==========================
 
 // make a managed payload by copying from a C array
@@ -21,7 +17,7 @@ static std::shared_ptr<const void> make_payload_copy(const T (& arr)[N])
     const std::shared_ptr<uint8_t[]> block(new uint8_t[bytes], std::default_delete<uint8_t[]>());
     std::memcpy(block.get(), arr, bytes);
     // alias as shared_ptr<const void> to the same allocation
-    return std::shared_ptr<const void>(block, static_cast<const void *>(block.get()));
+    return std::shared_ptr<const void>(block, block.get());
 }
 
 static ConstPacketPtr to_const(const PacketPtr & p)
@@ -35,8 +31,8 @@ static uint8_t transmit_called = 0;
 
 
 // Smart-pointer packets to capture results
-static PacketPtr sd_card_data = std::make_shared<telemetry_packet_t>();
-static PacketPtr transmit_data = std::make_shared<telemetry_packet_t>();
+static auto sd_card_data = std::make_shared<telemetry_packet_t>();
+static auto transmit_data = std::make_shared<telemetry_packet_t>();
 
 // SD card receive handler (now takes shared_ptr<telemetry_packet_t>)
 static SEDSPRINTF_STATUS sd_card_handler(std::shared_ptr<telemetry_packet_t> packet)
@@ -51,7 +47,7 @@ static SEDSPRINTF_STATUS transmit_helper(const std::shared_ptr<serialized_buffer
 {
     transmit_called = 1;
 
-    auto packet = deserialize_packet(serialized_buffer);
+    const auto packet = deserialize_packet(serialized_buffer);
     if (!packet) return SEDSPRINTF_ERROR;
 
     if (sedsprintf::copy_telemetry_packet(transmit_data, packet) != SEDSPRINTF_OK)

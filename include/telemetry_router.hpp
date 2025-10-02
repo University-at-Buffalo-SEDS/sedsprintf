@@ -5,6 +5,8 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <cstring>
+
 
 #define MAX_PRECISION 12
 typedef SEDSPRINTF_STATUS (* transmit_helper_t)(serialized_buffer_t * serialized_packet);

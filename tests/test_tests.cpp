@@ -52,7 +52,8 @@ static board_config_t board_config = {
 //Test that the telemetry router correctly routes data to the sd card and transmission functions and presents data in the right format
 TEST(TelemetryRouterTest, HandlesDataFlow)
 {
-    transmit_helper_t transmit_helpers[] = {transmit_helper}; // setup the transmit helpers (may be more than one element than one if sending over multiple buses
+    transmit_helper_t transmit_helpers[] = {transmit_helper};
+    // setup the transmit helpers (may be more than one element than one if sending over multiple buses
     const sedsprintf router = sedsprintf(transmit_helpers, 1, board_config); // create the router
     float data[message_elements[GPS_DATA]] = {5.214141324324f, 3.1342143243214132f, 1.123123123123f}; //fake data
 
@@ -72,7 +73,6 @@ TEST(TelemetryRouterTest, HandlesDataFlow)
             transmit_data.data,
             sd_card_data.message_type.data_size),
         0);
-
 }
 
 
@@ -133,26 +133,31 @@ TEST(HeaderToStringTest, ToStringWorks)
         .data = data
     };
 
-    std::string header_str = sedsprintf::telemetry_packet_metadata_to_string(&test_packet);
-    std::string expected_str = "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0";
+    const std::string header_str = sedsprintf::telemetry_packet_metadata_to_string(&test_packet);
+    const std::string expected_str = "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0";
     EXPECT_EQ(header_str, expected_str);
 }
 
 
 TEST(PacketToStringTest, ToStringWorks)
 {
-    float data[message_elements[GPS_DATA]] = {5.214141324324f, 3.1342143243214132f, 1.123123123123f};
+    float data[message_elements[GPS_DATA]] = {5.214141324324, 3.134214324321, 1.123123123123};
 
     telemetry_packet_t test_packet = {
         .message_type = message_type[GPS_DATA], // must have .data_size == sizeof(data)
         .timestamp = 0,
         .data = data
     };
-    float packet_data [message_elements[GPS_DATA]];
+    float packet_data[message_elements[GPS_DATA]];
     sedsprintf::get_data_from_packet(&test_packet, packet_data);
-    const std::string packet_string = sedsprintf::packet_to_string(&test_packet, packet_data, message_elements[GPS_DATA]);
-    // auto data_a = packet_string.c_str();
-    const std::string expected_str = "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0, Data: 5.214141, 3.134214, 1.123123";
+    const std::string packet_string = sedsprintf::packet_to_string(&test_packet, packet_data,
+                                                                   message_elements[GPS_DATA]);
+    std::ostringstream expected;
+    expected.setf(std::ios::fixed, std::ios::floatfield);
+    expected << "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0, Data: ";
+    expected << std::setprecision(MAX_PRECISION)
+            << data[0] << ", " << data[1] << ", " << data[2];
 
-    EXPECT_EQ(packet_string, expected_str);
+
+    EXPECT_EQ(packet_string, expected.str());
 }

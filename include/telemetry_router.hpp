@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iomanip>
 
+#define MAX_PRECISION 12
 typedef SEDSPRINTF_STATUS (* transmit_helper_t)(serialized_buffer_t * serialized_packet);
 
 typedef struct
@@ -71,8 +72,8 @@ public:
         os.setf(std::ios::fixed, std::ios::floatfield);
         for (size_t i = 0; i < count; ++i)
         {
-            if constexpr (std::is_floating_point<T>::value)
-                os << std::setprecision(6) << data[i];
+            if constexpr (std::is_floating_point_v<T>)
+                os << std::setprecision(MAX_PRECISION) << data[i];
             else
                 os << data[i];
 

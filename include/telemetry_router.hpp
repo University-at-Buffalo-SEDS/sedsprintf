@@ -7,6 +7,8 @@
 #include <iomanip>
 // ReSharper disable once CppUnusedIncludeDirective
 #include <cstring>
+#include <vector>
+
 
 
 #define MAX_PRECISION 12

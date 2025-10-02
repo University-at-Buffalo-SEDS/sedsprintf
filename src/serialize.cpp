@@ -8,11 +8,7 @@
 size_t get_packet_size(const telemetry_packet_t * packet)
 {
     // Bytes needed: message_type.type + message_type.data_size + timestamp + payload
-    return
-            sizeof(packet->message_type.type) +
-            sizeof(packet->message_type.data_size) +
-            sizeof(packet->message_type.endpoints)+
-            sizeof(packet->message_type.num_endpoints)+
+    return sizeof(packet->message_type.type) +
             sizeof(packet->timestamp) +
             packet->message_type.data_size;
 }
@@ -31,9 +27,7 @@ SEDSPRINTF_STATUS serialize_packet(const telemetry_packet_t * packet, const seri
 {
     if (!packet || !buffer || !buffer->buffer) return SEDSPRINTF_ERROR;
 
-    const size_t need = get_packet_size(packet);
-
-    if (buffer->size < need) return SEDSPRINTF_ERROR; // not enough space
+    if (const size_t required_space = get_packet_size(packet); buffer->size < required_space) return SEDSPRINTF_ERROR; // not enough space
 
     uint8_t * p = buffer->buffer;
 
@@ -69,12 +63,7 @@ telemetry_packet_t deserialize_packet(const serialized_buffer_t * serialized_buf
     if (!serialized_buffer || !serialized_buffer->buffer) return pkt;
 
     const uint8_t * p = serialized_buffer->buffer;
-    constexpr size_t min_hdr =
-            sizeof(pkt.message_type.type) +
-            sizeof(pkt.message_type.data_size) +
-            sizeof(pkt.message_type.endpoints)+
-            sizeof(pkt.message_type.num_endpoints)+
-            sizeof(pkt.timestamp);
+    const size_t min_hdr = get_packet_size(&pkt);
 
     if (serialized_buffer->size < min_hdr) return pkt; // incomplete header
 

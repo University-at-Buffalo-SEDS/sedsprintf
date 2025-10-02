@@ -59,7 +59,7 @@ static constexpr size_t message_size[NUM_DATA_TYPES] = {
     sizeof(float) * message_elements[GPS_DATA], // GPS_DATA
     sizeof(float) * message_elements[IMU_DATA], // IMU_DATA
     sizeof(float) * message_elements[BATTERY_STATUS], // BATTERY_STATUS
-    sizeof(int) * message_elements[SYSTEM_STATUS] // SYSTEM_STATUS
+    sizeof(uint8_t) * message_elements[SYSTEM_STATUS] // SYSTEM_STATUS
 };
 
 static const message_type_t message_type[NUM_DATA_TYPES] = {

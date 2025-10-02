@@ -78,7 +78,7 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
     uint8_t buff[size];
     serialized_buffer_t serialized = create_serialized_buffer(buff, size);
     serialize_packet(packet, &serialized);
-    int transmitted = 0;
+    bool transmitted = false;
     if (packet->message_type.num_endpoints == 0)
         return SEDSPRINTF_OK;
     for (size_t i = 0; i < packet->message_type.num_endpoints; i++)
@@ -97,7 +97,7 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
                     {
                         return SEDSPRINTF_ERROR;
                     }
-                    transmitted = 1;
+                    transmitted = true;
                 }
             }
         }

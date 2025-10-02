@@ -4,11 +4,11 @@
 #include "serialize.h"
 #include "telemetry_router.hpp"
 //==========================setup for router testing=================================
-int sd_card_called = 0;
-int transmit_called = 0;
+uint8_t sd_card_called = 0;
+uint8_t transmit_called = 0;
 
-int sd_buff[message_size[GPS_DATA]];
-int tx_buff[message_size[GPS_DATA]];
+float sd_buff[message_size[GPS_DATA]];
+float tx_buff[message_size[GPS_DATA]];
 
 telemetry_packet_t sd_card_data = {
     .message_type = message_type[GPS_DATA], // must have .data_size == sizeof(data)
@@ -84,7 +84,7 @@ std::string example_tostring_for_any_packet(const telemetry_packet_t * packet)
         case BATTERY_STATUS:
             return sedsprintf::packet_to_string<float>(packet);
         case SYSTEM_STATUS:
-            return sedsprintf::packet_to_string<int>(packet);
+            return sedsprintf::packet_to_string<uint8_t>(packet);
 
         case NUM_DATA_TYPES:
             //we should never ever ever hit this case because if the type is this then something was done very, very wrong
@@ -160,7 +160,7 @@ TEST(HeaderToStringTest, ToStringWorks)
 //check that the tostring for the headers and data works correctly
 TEST(PacketToStringTest, ToStringWorks)
 {
-    float data[message_elements[GPS_DATA]] = {5.214141324324, 3.134214324321, 1.123123123123};
+    float data[message_elements[GPS_DATA]] = {5.214141324324f, 3.134214324321f, 1.123123123123f};
 
     telemetry_packet_t test_packet = {
         .message_type = message_type[GPS_DATA], // must have .data_size == sizeof(data)

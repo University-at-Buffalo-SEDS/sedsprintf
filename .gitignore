@@ -1,26 +1,20 @@
 # Default ignored files
-/shelf/
-/workspace.xml
+shelf/
+workspace.xml
+
 # Editor-based HTTP Client requests
-/httpRequests/
+httpRequests/
+
 # Datasource local storage ignored files
-/dataSources/
-/dataSources.local.xml
+dataSources/
+dataSources.local.xml
+
+# MacOS system files
 .DS_Store
-# IntelliJ project files
+
+# IDE project files
 .idea/
+.vscode
+
 # CMake files
-/build/
-/CMakeFiles/
-/.vscode
-# clangd cache
-/.cache/
-# Local configuration artifacts (x86 only)
-/cmake_install.cmake
-/CMakeCache.txt
-/compile_commands.json
-/CTestTestfile.cmake
-/Makefile
-/src/CMakeFiles/
-/src/cmake_install.cmake
-/src/Makefile
+build/

@@ -20,6 +20,9 @@
 
 #ifndef SEDSPRINTF_STRUCT_SETUP_H
 #define SEDSPRINTF_STRUCT_SETUP_H
+
+#include <stdint.h> // integer types
+
 #include "telemetry_packet.h"
 // ========================= DO NOT EDIT THIS SECTION =========================
 

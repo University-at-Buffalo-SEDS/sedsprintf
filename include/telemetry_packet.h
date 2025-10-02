@@ -22,7 +22,9 @@
 #ifndef SEDSPRINTF_TELEMETRY_PACKET_H
 #define SEDSPRINTF_TELEMETRY_PACKET_H
 #include "enum_setup.h"
-#include <cstddef>  // size_t
+// ReSharper disable once CppUnusedIncludeDirective
+#include <cstddef>
+// ReSharper disable once CppUnusedIncludeDirective
 #include <ctime>
 
 // ========================= DO NOT EDIT THIS SECTION =========================

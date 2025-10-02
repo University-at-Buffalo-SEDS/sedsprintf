@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+// ReSharper disable once CppUnusedIncludeDirective
 #include <cstring>
 
 #include "serialize.h"

@@ -5,11 +5,11 @@
 #include <memory>
 
 // ---- Fixed wire sizes (portable) ----
-static constexpr size_t kTypeSize          = sizeof(uint32_t); // u32
-static constexpr size_t kDataSizeSize      = sizeof(uint32_t); // u32
-static constexpr size_t kTimeSize          = sizeof(uint64_t); // u64
-static constexpr size_t kNumEndpointsSize  = sizeof(uint32_t); // u32
-static constexpr size_t kEndpointElemSize  = sizeof(uint32_t); // each endpoint serialized as u32
+static constexpr size_t kTypeSize = sizeof(uint32_t); // u32
+static constexpr size_t kDataSizeSize = sizeof(uint32_t); // u32
+static constexpr size_t kTimeSize = sizeof(uint64_t); // u64
+static constexpr size_t kNumEndpointsSize = sizeof(uint32_t); // u32
+static constexpr size_t kEndpointElemSize = sizeof(uint32_t); // each endpoint serialized as u32
 
 // Fixed portion of the header (everything except the variable-length endpoints array)
 size_t header_size_bytes()
@@ -18,11 +18,11 @@ size_t header_size_bytes()
 }
 
 // Full packet size on the wire: fixed header + endpoints[] + payload
-size_t get_packet_size(const telemetry_packet_t& packet)
+size_t get_packet_size(const telemetry_packet_t & packet)
 {
     const size_t fixed = header_size_bytes();
     const size_t endpoints_bytes = packet.message_type.num_endpoints * kEndpointElemSize;
-    const size_t payload_bytes   = packet.message_type.data_size;
+    const size_t payload_bytes = packet.message_type.data_size;
     return fixed + endpoints_bytes + payload_bytes;
 }
 
@@ -35,28 +35,32 @@ std::shared_ptr<serialized_buffer_t> make_serialized_buffer(size_t size)
     return out;
 }
 
-SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t>& packet,
-                                   const std::shared_ptr<serialized_buffer_t>& buffer)
+SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t> & packet,
+                                   const std::shared_ptr<serialized_buffer_t> & buffer)
 {
     if (!packet || !buffer || !buffer->data) return SEDSPRINTF_ERROR;
 
     const size_t need = get_packet_size(*packet);
     if (buffer->size < need) return SEDSPRINTF_ERROR;
 
-    uint8_t* p = buffer->begin();
+    uint8_t * p = buffer->begin();
 
     // ---- header (fixed part) ----
     const auto type_u32 = static_cast<uint32_t>(packet->message_type.type);
-    std::memcpy(p, &type_u32, kTypeSize); p += kTypeSize;
+    std::memcpy(p, &type_u32, kTypeSize);
+    p += kTypeSize;
 
-    const auto dsz_u32  = static_cast<uint32_t>(packet->message_type.data_size);
-    std::memcpy(p, &dsz_u32, kDataSizeSize); p += kDataSizeSize;
+    const auto dsz_u32 = static_cast<uint32_t>(packet->message_type.data_size);
+    std::memcpy(p, &dsz_u32, kDataSizeSize);
+    p += kDataSizeSize;
 
-    const auto ts_u64   = static_cast<uint64_t>(packet->timestamp);
-    std::memcpy(p, &ts_u64, kTimeSize); p += kTimeSize;
+    const auto ts_u64 = static_cast<uint64_t>(packet->timestamp);
+    std::memcpy(p, &ts_u64, kTimeSize);
+    p += kTimeSize;
 
-    const auto nep_u32  = static_cast<uint32_t>(packet->message_type.num_endpoints);
-    std::memcpy(p, &nep_u32, kNumEndpointsSize); p += kNumEndpointsSize;
+    const auto nep_u32 = static_cast<uint32_t>(packet->message_type.num_endpoints);
+    std::memcpy(p, &nep_u32, kNumEndpointsSize);
+    p += kNumEndpointsSize;
 
     // ---- endpoints array (values only; never serialize pointers) ----
     for (int i = 0; i < packet->message_type.num_endpoints; ++i)
@@ -78,25 +82,29 @@ SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t>& pa
 }
 
 std::shared_ptr<telemetry_packet_t>
-deserialize_packet(const std::shared_ptr<serialized_buffer_t>& serialized)
+deserialize_packet(const std::shared_ptr<serialized_buffer_t> & serialized)
 {
     if (!serialized || !serialized->data) return {};
 
-    const uint8_t* p   = serialized->cbegin();
-    const size_t   sz  = serialized->size;
+    const uint8_t * p = serialized->cbegin();
+    const size_t sz = serialized->size;
 
     if (sz < header_size_bytes()) return {};
 
     uint32_t type_u32 = 0;
-    uint32_t dsz_u32  = 0;
-    uint64_t ts_u64   = 0;
-    uint32_t nep_u32  = 0;
+    uint32_t dsz_u32 = 0;
+    uint64_t ts_u64 = 0;
+    uint32_t nep_u32 = 0;
 
     // ---- read fixed header ----
-    std::memcpy(&type_u32, p, kTypeSize);     p += kTypeSize;
-    std::memcpy(&dsz_u32,  p, kDataSizeSize); p += kDataSizeSize;
-    std::memcpy(&ts_u64,   p, kTimeSize);     p += kTimeSize;
-    std::memcpy(&nep_u32,  p, kNumEndpointsSize); p += kNumEndpointsSize;
+    std::memcpy(&type_u32, p, kTypeSize);
+    p += kTypeSize;
+    std::memcpy(&dsz_u32, p, kDataSizeSize);
+    p += kDataSizeSize;
+    std::memcpy(&ts_u64, p, kTimeSize);
+    p += kTimeSize;
+    std::memcpy(&nep_u32, p, kNumEndpointsSize);
+    p += kNumEndpointsSize;
 
     // Bounds / sanity
     const size_t endpoints_bytes = static_cast<size_t>(nep_u32) * kEndpointElemSize;
@@ -122,12 +130,12 @@ deserialize_packet(const std::shared_ptr<serialized_buffer_t>& serialized)
     }
 
     // alias payload into same allocation (zero-copy)
-    const uint8_t* payload = p; // p now points at payload start
+    const uint8_t * payload = p; // p now points at payload start
 
     // ---- build packet ----
     auto pkt = std::make_shared<telemetry_packet_t>();
-    pkt->message_type.type        = static_cast<data_type_t>(type_u32);
-    pkt->message_type.data_size   = static_cast<size_t>(dsz_u32);
+    pkt->message_type.type = static_cast<data_type_t>(type_u32);
+    pkt->message_type.data_size = static_cast<size_t>(dsz_u32);
     pkt->message_type.num_endpoints = static_cast<size_t>(nep_u32);
 
     if (nep_u32 > 0)
@@ -150,7 +158,7 @@ deserialize_packet(const std::shared_ptr<serialized_buffer_t>& serialized)
     {
         // alias payload's lifetime to the underlying serialized buffer allocation
         pkt->data = std::shared_ptr<const void>(
-            serialized->data, static_cast<const void*>(payload));
+            serialized->data, static_cast<const void *>(payload));
     }
     else
     {

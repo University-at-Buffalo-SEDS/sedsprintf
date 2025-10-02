@@ -158,14 +158,14 @@ TEST(SerializationTest, HandlesSerializationAndDeserialization)
     // extract into local arrays
     float received[message_elements[GPS_DATA]]{};
     ASSERT_EQ(sedsprintf::get_data_f32(to_const(deserialized),
-                           received,
-                           message_elements[GPS_DATA]),
+                  received,
+                  message_elements[GPS_DATA]),
               SEDSPRINTF_OK);
 
     float local_copy[message_elements[GPS_DATA]]{};
     ASSERT_EQ(sedsprintf::get_data_f32(to_const(test_packet),
-                           local_copy,
-                           message_elements[GPS_DATA]),
+                  local_copy,
+                  message_elements[GPS_DATA]),
               SEDSPRINTF_OK);
 
     EXPECT_EQ(local_copy[0], received[0]);

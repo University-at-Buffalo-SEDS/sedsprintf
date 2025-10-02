@@ -16,8 +16,7 @@ typedef SEDSPRINTF_STATUS (* transmit_helper_t)(serialized_buffer_t * serialized
 
 typedef struct
 {
-    transmit_helper_t * transmit_helpers;
-    size_t num_helpers;
+    transmit_helper_t transmit_helper;
     board_config_t board_config;
 } SEDSPRINTF_CONFIG;
 
@@ -184,7 +183,7 @@ public:
 
     static std::string packet_to_hex_string(const telemetry_packet_t * packet, const void * data, size_t size_bytes);
 
-    sedsprintf(transmit_helper_t transmit_helpers[], size_t num_helpers, board_config_t config);
+    sedsprintf(transmit_helper_t transmit_helper, board_config_t config);
 
     SEDSPRINTF_STATUS log(const message_type_t &, void * data) const;
 

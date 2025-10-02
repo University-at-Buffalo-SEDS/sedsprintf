@@ -6,6 +6,7 @@ custom-made avionics bay.
 ## Authors
 
 - [@origami-yoda](https://github.com/origami-yoda)
+- [@Rylan-Meilutis](https://github.com/rylan-meilutis)
 
 ## Building + Running Tests
 
@@ -20,3 +21,4 @@ To run tests:
 ```bash
   ./build.sh test
 ```
+

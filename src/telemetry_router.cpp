@@ -54,10 +54,9 @@ SEDSPRINTF_STATUS sedsprintf::copy_telemetry_packet(telemetry_packet_t * dest, c
     return SEDSPRINTF_OK;
 }
 
-sedsprintf::sedsprintf(transmit_helper_t transmit_helpers[], size_t num_helpers, board_config_t config)
+sedsprintf::sedsprintf(const transmit_helper_t transmit_helper, const board_config_t config)
 {
-    this->cfg.transmit_helpers = transmit_helpers;
-    this->cfg.num_helpers = num_helpers;
+    this->cfg.transmit_helper = transmit_helper;
     this->cfg.board_config = config;
 }
 
@@ -87,13 +86,13 @@ SEDSPRINTF_STATUS sedsprintf::transmit(telemetry_packet_t * packet) const
         if (!transmitted)
         {
             //already transmitted, skip
-            for (size_t j = 0; j < cfg.num_helpers; j++)
+            for (size_t j = 0; j < NUM_DATA_ENDPOINTS; j++)
             {
-                //transmit all remote endpoints
-                if (cfg.transmit_helpers[j] != nullptr &&
+                //transmit to the endpoint
+                if (cfg.transmit_helper != nullptr &&
                     cfg.board_config.local_data_endpoints[j].local_endpoint != packet->message_type.endpoints[i])
                 {
-                    if (cfg.transmit_helpers[j](&serialized) != SEDSPRINTF_OK)
+                    if (cfg.transmit_helper(&serialized) != SEDSPRINTF_OK)
                     {
                         return SEDSPRINTF_ERROR;
                     }

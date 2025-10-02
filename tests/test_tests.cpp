@@ -52,9 +52,8 @@ static board_config_t board_config = {
 //Test that the telemetry router correctly routes data to the sd card and transmission functions and presents data in the right format
 TEST(TelemetryRouterTest, HandlesDataFlow)
 {
-    transmit_helper_t transmit_helpers[] = {transmit_helper};
-    // setup the transmit helpers (may be more than one element than one if sending over multiple buses
-    const sedsprintf router = sedsprintf(transmit_helpers, 1, board_config); // create the router
+    // setup the transmit helpers (if multiple buses need to be sent over, have the helper call multiple other functions.)
+    const sedsprintf router = sedsprintf(transmit_helper, board_config); // create the router
     float data[message_elements[GPS_DATA]] = {5.214141324324f, 3.1342143243214132f, 1.123123123123f}; //fake data
 
     sd_card_called = 0;

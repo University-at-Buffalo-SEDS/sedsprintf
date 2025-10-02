@@ -112,9 +112,10 @@ TEST(SerializationTest, HandlesSerializationAndDeserialization)
             test_packet.data,
             test_packet.message_type.data_size),
         0);
-
-    auto * received_data = static_cast<const float *>(deserialized.data);
-    auto * local_data = static_cast<const float *>(test_packet.data);
+    float received_data[message_elements[GPS_DATA]];
+    sedsprintf::get_data_from_packet(&deserialized, received_data);
+    float local_data[message_elements[GPS_DATA]];
+    sedsprintf::get_data_from_packet(&test_packet, local_data);
     ASSERT_EQ(local_data[0], received_data[0]);
     ASSERT_EQ(local_data[1], received_data[1]);
     ASSERT_EQ(local_data[2], received_data[2]);
@@ -135,4 +136,23 @@ TEST(HeaderToStringTest, ToStringWorks)
     std::string header_str = sedsprintf::telemetry_packet_metadata_to_string(&test_packet);
     std::string expected_str = "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0";
     EXPECT_EQ(header_str, expected_str);
+}
+
+
+TEST(PacketToStringTest, ToStringWorks)
+{
+    float data[message_elements[GPS_DATA]] = {5.214141324324f, 3.1342143243214132f, 1.123123123123f};
+
+    telemetry_packet_t test_packet = {
+        .message_type = message_type[GPS_DATA], // must have .data_size == sizeof(data)
+        .timestamp = 0,
+        .data = data
+    };
+    float packet_data [message_elements[GPS_DATA]];
+    sedsprintf::get_data_from_packet(&test_packet, packet_data);
+    const std::string packet_string = sedsprintf::packet_to_string(&test_packet, packet_data, message_elements[GPS_DATA]);
+    // auto data_a = packet_string.c_str();
+    const std::string expected_str = "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0, Data: 5.214141, 3.134214, 1.123123";
+
+    EXPECT_EQ(packet_string, expected_str);
 }

@@ -4,7 +4,6 @@
 
 #include "serialize.h"
 #include <cstring>
-#include <cstdlib>
 
 size_t get_packet_size(const telemetry_packet_t * packet)
 {

@@ -1,7 +1,7 @@
 #include "telemetry_router.hpp"
 #include <cstring>
-
 #include "serialize.h"
+
 std::string sedsprintf::telemetry_packet_metadata_to_string(const telemetry_packet_t * packet)
 {
     std::string type = message_names[packet->message_type.type];
@@ -14,6 +14,27 @@ std::string sedsprintf::telemetry_packet_metadata_to_string(const telemetry_pack
            ", Endpoints: [" + dest_endpoints + "], Timestamp: " + std::to_string(packet->timestamp);
 }
 
+
+std::string sedsprintf::packet_to_hex_string(const telemetry_packet_t * packet,
+                                             const void * data,
+                                             size_t size_bytes)
+{
+    if (!packet || !data) return "ERROR: null packet or data";
+
+    if (size_bytes == 0) size_bytes = packet->message_type.data_size;
+
+    std::ostringstream os;
+    os << telemetry_packet_metadata_to_string(packet) << ", Payload (hex): ";
+
+    const uint8_t * p = static_cast<const uint8_t *>(data);
+    os << std::hex << std::setfill('0');
+    for (size_t i = 0; i < size_bytes; ++i)
+    {
+        os << "0x" << std::setw(2) << static_cast<unsigned>(p[i]);
+        if (i + 1 < size_bytes) os << ' ';
+    }
+    return os.str();
+}
 
 SEDSPRINTF_STATUS sedsprintf::copy_telemetry_packet(telemetry_packet_t * dest, const telemetry_packet_t * src)
 {

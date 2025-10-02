@@ -8,7 +8,7 @@
 size_t get_packet_size(const telemetry_packet_t * packet)
 {
     // Bytes needed: message_type.type + message_type.data_size + timestamp + payload
-    return sizeof(packet->message_type.type) +
+    return sizeof(packet->message_type) +
             sizeof(packet->timestamp) +
             packet->message_type.data_size;
 }

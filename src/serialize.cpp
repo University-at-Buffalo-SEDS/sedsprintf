@@ -66,11 +66,11 @@ SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t> & p
 {
     if (!packet || !buffer || !buffer->data) return SEDSPRINTF_ERROR;
 
-    const std::size_t need = get_packet_size(*packet);
+    const std::size_t size = get_packet_size(*packet);
 
     // Build into a temporary vector first (no pointer math)
     std::vector<std::uint8_t> bytes;
-    bytes.reserve(need); // avoid reallocations
+    bytes.reserve(size); // avoid reallocations
 
     // ---- header (fixed part) ----
     append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.type));
@@ -92,7 +92,7 @@ SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t> & p
     }
 
     // Sanity check: computed size should match expected
-    if (bytes.size() != need)
+    if (bytes.size() != size)
     {
         return SEDSPRINTF_ERROR;
     }
@@ -103,40 +103,6 @@ SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t> & p
 
     return SEDSPRINTF_OK;
 }
-
-struct ByteReader
-{
-    const uint8_t * base = nullptr;
-    std::size_t size = 0;
-    std::size_t off = 0;
-
-    [[nodiscard]] std::size_t remaining() const noexcept { return (off <= size) ? (size - off) : 0; }
-
-    bool read_bytes(void * dst, std::size_t n)
-    {
-        if (n > remaining()) return false;
-        std::memcpy(dst, base + off, n);
-        off += n;
-        return true;
-    }
-
-    template<class T>
-    bool read(T & out)
-    {
-        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-        return read_bytes(&out, sizeof(T));
-    }
-
-    // view current pointer without advancing (for zero-copy alias)
-    [[nodiscard]] const uint8_t * current() const noexcept { return base + off; }
-
-    bool skip(std::size_t n)
-    {
-        if (n > remaining()) return false;
-        off += n;
-        return true;
-    }
-};
 
 
 std::shared_ptr<telemetry_packet_t>

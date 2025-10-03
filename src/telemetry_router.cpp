@@ -115,7 +115,6 @@ sedsprintf::sedsprintf(const transmit_helper_t transmit_helper, const board_conf
 }
 
 
-
 // ---------- Log (build packet with managed payload) ----------
 SEDSPRINTF_STATUS sedsprintf::log_handler(const message_type_t & type, std::shared_ptr<const void> data) const
 {

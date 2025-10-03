@@ -111,6 +111,7 @@ public:
     static SEDSPRINTF_STATUS copy_telemetry_packet(const PacketPtr & dest,
                                                    const ConstPacketPtr & src);
 
+
     static std::string packet_to_hex_string(const ConstPacketPtr & packet,
                                             const std::shared_ptr<const void> & data,
                                             size_t size_bytes);

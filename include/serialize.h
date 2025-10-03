@@ -45,6 +45,7 @@ struct ByteReader
         return true;
     }
 };
+
 // If message_type_t contains pointer fields (like endpoints), DO NOT serialize those pointers.
 // Only serialize concrete header fields + payload length + payload.
 size_t header_size_bytes();

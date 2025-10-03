@@ -2,6 +2,7 @@
 // ReSharper disable once CppUnusedIncludeDirective
 #include <cstdint>
 #include <memory>
+#include <cstring>
 #include "struct_setup.h"
 
 // Owning byte buffer (shared so multiple packets/views can reference it)

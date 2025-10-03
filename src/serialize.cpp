@@ -3,6 +3,17 @@
 // ReSharper disable once CppUnusedIncludeDirective
 #include <cstdint>
 #include <memory>
+#include <vector>
+#include <type_traits>
+
+// Dear programmer:
+// When I wrote this code, only god and I knew how it worked.
+// Now, only god knows it!
+// Therefore, if you are trying to optimize
+// this routine, and it fails (it most surely will),
+// please increase this counter as a warning for the next person:
+// total hours_wasted_here = 24
+
 
 // ---- Fixed wire sizes (portable) ----
 static constexpr size_t kTypeSize = sizeof(uint32_t); // u32
@@ -26,7 +37,7 @@ size_t get_packet_size(const telemetry_packet_t & packet)
     return fixed + endpoints_bytes + payload_bytes;
 }
 
-std::shared_ptr<serialized_buffer_t> make_serialized_buffer(size_t size)
+std::shared_ptr<serialized_buffer_t> make_serialized_buffer(const size_t size)
 {
     auto out = std::make_shared<serialized_buffer_t>();
     out->data = std::shared_ptr<uint8_t[]>(new uint8_t[size],
@@ -35,128 +46,156 @@ std::shared_ptr<serialized_buffer_t> make_serialized_buffer(size_t size)
     return out;
 }
 
+
+template<class T>
+static void append_trivial(std::vector<std::uint8_t> & out, const T & v)
+{
+    static_assert(std::is_trivially_copyable_v<T>, "serialization requires trivially copyable");
+    auto p = reinterpret_cast<const std::uint8_t *>(&v);
+    out.insert(out.end(), p, p + sizeof(T));
+}
+
+static void append_bytes(std::vector<std::uint8_t> & out, const void * src, std::size_t n)
+{
+    const auto * p = static_cast<const std::uint8_t *>(src);
+    out.insert(out.end(), p, p + n);
+}
+
 SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t> & packet,
                                    const std::shared_ptr<serialized_buffer_t> & buffer)
 {
     if (!packet || !buffer || !buffer->data) return SEDSPRINTF_ERROR;
 
-    const size_t need = get_packet_size(*packet);
-    if (buffer->size < need) return SEDSPRINTF_ERROR;
+    const std::size_t need = get_packet_size(*packet);
 
-    uint8_t * p = buffer->begin();
+    // Build into a temporary vector first (no pointer math)
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(need); // avoid reallocations
 
     // ---- header (fixed part) ----
-    const auto type_u32 = static_cast<uint32_t>(packet->message_type.type);
-    std::memcpy(p, &type_u32, kTypeSize);
-    p += kTypeSize;
-
-    const auto dsz_u32 = static_cast<uint32_t>(packet->message_type.data_size);
-    std::memcpy(p, &dsz_u32, kDataSizeSize);
-    p += kDataSizeSize;
-
-    const auto ts_u64 = static_cast<uint64_t>(packet->timestamp);
-    std::memcpy(p, &ts_u64, kTimeSize);
-    p += kTimeSize;
-
-    const auto nep_u32 = static_cast<uint32_t>(packet->message_type.num_endpoints);
-    std::memcpy(p, &nep_u32, kNumEndpointsSize);
-    p += kNumEndpointsSize;
+    append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.type));
+    append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.data_size));
+    append_trivial<std::uint64_t>(bytes, static_cast<std::uint64_t>(packet->timestamp));
+    append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.num_endpoints));
 
     // ---- endpoints array (values only; never serialize pointers) ----
     for (int i = 0; i < packet->message_type.num_endpoints; ++i)
     {
-        const auto ep_u32 = static_cast<uint32_t>(packet->message_type.endpoints[i]);
-        std::memcpy(p, &ep_u32, kEndpointElemSize);
-        p += kEndpointElemSize;
+        append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.endpoints[i]));
     }
 
     // ---- payload ----
     if (packet->message_type.data_size > 0)
     {
         if (!packet->data) return SEDSPRINTF_ERROR;
-        std::memcpy(p, packet->data.get(), packet->message_type.data_size);
-        // p += data_size; // not needed after last write
+        append_bytes(bytes, packet->data.get(), packet->message_type.data_size);
     }
+
+    // Sanity check: computed size should match expected
+    if (bytes.size() != need)
+    {
+        return SEDSPRINTF_ERROR;
+    }
+
+    // Copy once into the caller-provided buffer
+    if (buffer->size < bytes.size()) return SEDSPRINTF_ERROR;
+    std::memcpy(buffer->data.get(), bytes.data(), bytes.size());
 
     return SEDSPRINTF_OK;
 }
+
+struct ByteReader
+{
+    const uint8_t * base = nullptr;
+    std::size_t size = 0;
+    std::size_t off = 0;
+
+    [[nodiscard]] std::size_t remaining() const noexcept { return (off <= size) ? (size - off) : 0; }
+
+    bool read_bytes(void * dst, std::size_t n)
+    {
+        if (n > remaining()) return false;
+        std::memcpy(dst, base + off, n);
+        off += n;
+        return true;
+    }
+
+    template<class T>
+    bool read(T & out)
+    {
+        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+        return read_bytes(&out, sizeof(T));
+    }
+
+    // view current pointer without advancing (for zero-copy alias)
+    [[nodiscard]] const uint8_t * current() const noexcept { return base + off; }
+
+    bool skip(std::size_t n)
+    {
+        if (n > remaining()) return false;
+        off += n;
+        return true;
+    }
+};
+
 
 std::shared_ptr<telemetry_packet_t>
 deserialize_packet(const std::shared_ptr<serialized_buffer_t> & serialized)
 {
     if (!serialized || !serialized->data) return {};
 
-    const uint8_t * p = serialized->cbegin();
-    const size_t sz = serialized->size;
+    ByteReader r{serialized->data.get(), serialized->size, 0};
 
-    if (sz < header_size_bytes()) return {};
+    if (r.size < header_size_bytes()) return {};
 
+    // ---- read fixed header ----
     uint32_t type_u32 = 0;
     uint32_t dsz_u32 = 0;
     uint64_t ts_u64 = 0;
     uint32_t nep_u32 = 0;
 
-    // ---- read fixed header ----
-    std::memcpy(&type_u32, p, kTypeSize);
-    p += kTypeSize;
-    std::memcpy(&dsz_u32, p, kDataSizeSize);
-    p += kDataSizeSize;
-    std::memcpy(&ts_u64, p, kTimeSize);
-    p += kTimeSize;
-    std::memcpy(&nep_u32, p, kNumEndpointsSize);
-    p += kNumEndpointsSize;
+    if (!r.read(type_u32)) return {};
+    if (!r.read(dsz_u32)) return {};
+    if (!r.read(ts_u64)) return {};
+    if (!r.read(nep_u32)) return {};
 
-    // Bounds / sanity
-    const size_t endpoints_bytes = static_cast<size_t>(nep_u32) * kEndpointElemSize;
-    const size_t total_need = header_size_bytes() + endpoints_bytes + static_cast<size_t>(dsz_u32);
-    if (sz < total_need) return {};
+    // ---- bounds check for endpoints + payload ----
+    const std::size_t endpoints_bytes = static_cast<std::size_t>(nep_u32) * kEndpointElemSize;
+    const std::size_t total_need =
+            header_size_bytes() + endpoints_bytes + static_cast<std::size_t>(dsz_u32);
+    if (r.size < total_need) return {};
 
-    // ---- reconstruct endpoints managed array ----
-    std::unique_ptr<data_endpoint_t[]> eps_up;
+    // ---- endpoints ----
+    std::shared_ptr<const data_endpoint_t[]> eps_sp;
     if (nep_u32 > 0)
     {
-        eps_up = std::make_unique<data_endpoint_t[]>(nep_u32);
-        for (size_t i = 0; i < static_cast<size_t>(nep_u32); ++i)
+        auto eps_up = std::make_unique<data_endpoint_t[]>(nep_u32);
+        for (std::size_t i = 0; i < static_cast<std::size_t>(nep_u32); ++i)
         {
             uint32_t ep_u32 = 0;
-            std::memcpy(&ep_u32, p, kEndpointElemSize);
-            p += kEndpointElemSize;
+            if (!r.read(ep_u32)) return {};
             eps_up[i] = static_cast<data_endpoint_t>(ep_u32);
         }
-    }
-    else
-    {
-        // no endpoints; p stays where it is (immediately before payload)
+        // move unique_ptr -> shared_ptr with array deleter
+        eps_sp = std::shared_ptr<const data_endpoint_t[]>(
+            eps_up.release(), std::default_delete<const data_endpoint_t[]>());
     }
 
-    // alias payload into same allocation (zero-copy)
-    const uint8_t * payload = p; // p now points at payload start
+    // ---- payload (zero-copy alias into serialized buffer allocation) ----
+    const uint8_t * payload = r.current();
+    if (!r.skip(dsz_u32)) return {};
 
     // ---- build packet ----
     auto pkt = std::make_shared<telemetry_packet_t>();
     pkt->message_type.type = static_cast<data_type_t>(type_u32);
-    pkt->message_type.data_size = static_cast<size_t>(dsz_u32);
-    pkt->message_type.num_endpoints = static_cast<size_t>(nep_u32);
-
-    if (nep_u32 > 0)
-    {
-        // move unique_ptr -> shared_ptr<const T[]> with array deleter
-        std::shared_ptr<const data_endpoint_t[]> eps_sp(
-            eps_up.release(),
-            std::default_delete<const data_endpoint_t[]>()
-        );
-        pkt->message_type.endpoints = std::move(eps_sp);
-    }
-    else
-    {
-        pkt->message_type.endpoints.reset(); // nullptr
-    }
-
+    pkt->message_type.data_size = static_cast<std::size_t>(dsz_u32);
+    pkt->message_type.num_endpoints = static_cast<std::size_t>(nep_u32);
+    pkt->message_type.endpoints = std::move(eps_sp);
     pkt->timestamp = static_cast<std::time_t>(ts_u64);
 
     if (pkt->message_type.data_size > 0)
     {
-        // alias payload's lifetime to the underlying serialized buffer allocation
+        // alias lifetime to the serialized buffer’s allocation
         pkt->data = std::shared_ptr<const void>(
             serialized->data, static_cast<const void *>(payload));
     }

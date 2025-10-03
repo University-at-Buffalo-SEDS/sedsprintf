@@ -164,12 +164,12 @@ SEDSPRINTF_STATUS sedsprintf::transmit(const ConstPacketPtr & packet) const
         // Local dispatch to matching endpoints
         for (int j = 0; j < cfg.board_config.num_local_endpoints; ++j)
         {
-            const auto & entry = cfg.board_config.local_data_endpoints[j];
-            if (entry.receive_handler && entry.local_endpoint == target)
+            if (const auto & [local_endpoint, receive_handler] = cfg.board_config.local_data_endpoints[j];
+                receive_handler && local_endpoint == target)
             {
                 // Handlers accept shared_ptr<telemetry_packet_t>
                 auto mutable_packet = std::const_pointer_cast<telemetry_packet_t>(packet);
-                if (entry.receive_handler(mutable_packet) != SEDSPRINTF_OK)
+                if (receive_handler(mutable_packet) != SEDSPRINTF_OK)
                     return SEDSPRINTF_ERROR;
             }
         }

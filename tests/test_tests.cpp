@@ -116,11 +116,11 @@ TEST(TelemetryRouterTest, HandlesDataFlow)
 TEST(SerializationTest, HandlesSerializationAndDeserialization)
 {
     // Build a managed packet with payload
-    float data[message_elements[GPS_DATA]] = {
+    constexpr float data[message_elements[GPS_DATA]] = {
         5.214141324324f, 3.1342143243214132f, 1.123123123123f
     };
 
-    auto test_packet = std::make_shared<telemetry_packet_t>();
+    const auto test_packet = std::make_shared<telemetry_packet_t>();
     test_packet->message_type = message_type[GPS_DATA];
     test_packet->timestamp = 0;
     test_packet->data = make_payload_copy(data); // managed payload
@@ -176,11 +176,11 @@ TEST(SerializationTest, HandlesSerializationAndDeserialization)
 
 TEST(HeaderToStringTest, ToStringWorks)
 {
-    float data[message_elements[GPS_DATA]] = {
+    constexpr float data[message_elements[GPS_DATA]] = {
         5.214141324324f, 3.1342143243214132f, 1.123123123123f
     };
 
-    auto packet = std::make_shared<telemetry_packet_t>();
+    const auto packet = std::make_shared<telemetry_packet_t>();
     packet->message_type = message_type[GPS_DATA];
     packet->timestamp = 0;
     packet->data = make_payload_copy(data);
@@ -192,11 +192,11 @@ TEST(HeaderToStringTest, ToStringWorks)
 
 TEST(PacketToStringTest, ToStringWorks)
 {
-    float data[message_elements[GPS_DATA]] = {
-        5.214141324324f, 3.134214324321f, 1.123123123123f
+    constexpr float data[message_elements[GPS_DATA]] = {
+        5.214141324324f, 3.134584235724385843295243214324321f, 1.123123123123f
     };
 
-    auto packet = std::make_shared<telemetry_packet_t>();
+    const auto packet = std::make_shared<telemetry_packet_t>();
     packet->message_type = message_type[GPS_DATA];
     packet->timestamp = 0;
     packet->data = make_payload_copy(data);

@@ -9,11 +9,6 @@ struct serialized_buffer_t
 {
     std::shared_ptr<uint8_t[]> data;
     size_t size = 0;
-
-    [[nodiscard]] uint8_t * begin() const { return data.get(); }
-    [[nodiscard]] const uint8_t * cbegin() const { return data.get(); }
-    [[nodiscard]] uint8_t * end() const { return data.get() + size; }
-    [[nodiscard]] const uint8_t * cend() const { return data.get() + size; }
 };
 
 // If message_type_t contains pointer fields (like endpoints), DO NOT serialize those pointers.

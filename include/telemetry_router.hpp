@@ -22,11 +22,11 @@
 using transmit_helper_t = SEDSPRINTF_STATUS (*)(const std::shared_ptr<serialized_buffer_t> &);
 
 // Configuration bundle
-typedef struct
+struct SEDSPRINTF_CONFIG
 {
-    transmit_helper_t transmit_helper;
+    transmit_helper_t transmit_helper{};
     board_config_t board_config;
-} SEDSPRINTF_CONFIG;
+};
 
 
 enum class PayloadFormat
@@ -61,24 +61,51 @@ public:
     // Logging API:
     // Pass the type and a managed payload buffer (must be at least type.data_size bytes)
     // If you still have raw memory sometimes, see helper wrap_raw() below.
-    [[nodiscard]] SEDSPRINTF_STATUS log(const message_type_t & type, std::shared_ptr<const void> data) const;
 
     // Helper for raw pointers (copies into managed block)
-    template<typename T>
-    SEDSPRINTF_STATUS log(const message_type_t & type, const T * src, const size_t count) const
+    template<class T, std::size_t N>
+    SEDSPRINTF_STATUS log(const message_type_t & type, const T (& arr)[N]) const
     {
-        const size_t need = sizeof(T) * count;
+        static_assert(std::is_trivially_copyable_v<T>, "payload must be trivially copyable");
+        const std::size_t need = sizeof(T) * N;
         if (need != type.data_size) return SEDSPRINTF_ERROR;
 
-        const auto block = std::shared_ptr<uint8_t[]>(
-            new uint8_t[need],
-            std::default_delete<uint8_t[]>()
-        );
-        std::memcpy(block.get(), src, need);
+        const auto block = std::shared_ptr<uint8_t[]>(new uint8_t[need], std::default_delete<uint8_t[]>());
+        std::memcpy(block.get(), arr, need);
+        std::shared_ptr<const void> payload(block, block.get()); // aliasing, owns same block
+        return log_handler(type, payload);
+    }
 
-        // aliasing shared_ptr<const void> to the same block
-        std::shared_ptr<const void> payload(block, static_cast<const void *>(block.get()));
-        return log(type, payload);
+    template<class T>
+    SEDSPRINTF_STATUS log_object(const message_type_t & type, const T & obj) const
+    {
+        static_assert(std::is_trivially_copyable_v<T>, "payload must be trivially copyable");
+        const std::size_t need = sizeof(T);
+        if (need != type.data_size) return SEDSPRINTF_ERROR;
+
+        auto block = std::shared_ptr<uint8_t[]>(new uint8_t[need], std::default_delete<uint8_t[]>());
+        std::memcpy(block.get(), &obj, need);
+        const std::shared_ptr<const void> payload(block, block.get());
+        return log_handler(type, payload);
+    }
+
+    template<class T>
+    SEDSPRINTF_STATUS log(const message_type_t & type, const std::vector<T> & v) const
+    {
+        static_assert(std::is_trivially_copyable_v<T>, "payload must be trivially copyable");
+        const std::size_t need = sizeof(T) * v.size();
+        if (need != type.data_size) return SEDSPRINTF_ERROR;
+
+        auto block = std::shared_ptr<uint8_t[]>(new uint8_t[need], std::default_delete<uint8_t[]>());
+        if (need) std::memcpy(block.get(), v.data(), need);
+        const std::shared_ptr<const void> payload(block, block.get());
+        return log_handler(type, payload);
+    }
+
+    template<class T, std::size_t N>
+    SEDSPRINTF_STATUS log(const message_type_t & type, const std::array<T, N> & a) const
+    {
+        return log(type, std::vector<T>(a.begin(), a.end())); // or memcpy from a.data()
     }
 
     static SEDSPRINTF_STATUS copy_telemetry_packet(const PacketPtr & dest,
@@ -92,7 +119,7 @@ public:
 
     // Infer element type/size from packet + requested hint
     static std::pair<ElementType, size_t>
-    infer_element_type(const ConstPacketPtr & packet, ElementType requested)
+    infer_element_type(const ConstPacketPtr & packet, const ElementType requested)
     {
         if (requested != ElementType::Auto)
         {
@@ -104,6 +131,7 @@ public:
                 case ElementType::U16: return {ElementType::U16, 2};
                 case ElementType::U32: return {ElementType::U32, 4};
                 case ElementType::U64: return {ElementType::U64, 8};
+                // ReSharper disable once CppDFAUnreachableCode
                 case ElementType::Auto: break; // handled below
             }
         }
@@ -112,7 +140,7 @@ public:
         const auto t = static_cast<size_t>(packet->message_type.type);
         const size_t elems = message_elements[t] ? message_elements[t] : 1;
 
-        switch (const size_t elem_size = message_size[t] / elems)
+        switch (message_size[t] / elems)
         {
             case 1: return {ElementType::U8, 1};
             case 2: return {ElementType::U16, 2};
@@ -262,8 +290,6 @@ public:
             if (elem_size == 8) return {elem_size, PayloadFormat::Float64};
             if (elem_size == 1) return {elem_size, PayloadFormat::U8};
             if (elem_size == 2) return {elem_size, PayloadFormat::U16};
-            if (elem_size == 4) return {elem_size, PayloadFormat::U32}; // already covered above
-            if (elem_size == 8) return {elem_size, PayloadFormat::U64}; // already covered above
             return {elem_size, PayloadFormat::Hex};
         };
 
@@ -380,6 +406,8 @@ public:
 
 private:
     [[nodiscard]] SEDSPRINTF_STATUS transmit(const ConstPacketPtr & packet) const;
+
+    [[nodiscard]] SEDSPRINTF_STATUS log_handler(const message_type_t & type, std::shared_ptr<const void> data) const;
 
     [[nodiscard]] SEDSPRINTF_STATUS receive(const std::shared_ptr<serialized_buffer_t> & serialized_buffer) const;
 

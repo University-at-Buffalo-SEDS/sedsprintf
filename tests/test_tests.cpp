@@ -65,8 +65,8 @@ static board_config_t make_test_board_config()
     constexpr size_t N = 1;
     auto up = std::make_unique<data_endpoint_handler_t[]>(N);
     up[0] = data_endpoint_handler_t{SD_CARD, sd_card_handler};
-    std::shared_ptr<const data_endpoint_handler_t[]> sp(up.release(),
-                                                        std::default_delete<const data_endpoint_handler_t[]>());
+    const std::shared_ptr<const data_endpoint_handler_t[]> sp(up.release(),
+                                                              std::default_delete<const data_endpoint_handler_t[]>());
     return board_config_t{sp, N};
 }
 
@@ -89,8 +89,8 @@ TEST(TelemetryRouterTest, HandlesDataFlow)
     transmit_called = 0;
 
     // Log using convenience that copies raw -> managed payload
-    ASSERT_EQ(router.log<float>(message_type[GPS_DATA],
-                  data, message_elements[GPS_DATA]),
+    ASSERT_EQ(router.log(message_type[GPS_DATA],
+                  data),
               SEDSPRINTF_OK);
 
     ASSERT_EQ(sd_card_called, 1);

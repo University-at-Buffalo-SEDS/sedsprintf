@@ -12,8 +12,7 @@
 #include <string>
 #include <sys/types.h>
 
-// Assemble fake struct stacking doll
-// TODO Have someone review these shared pointer declarations
+// Creates a deterministic telemetry buffer
 static std::shared_ptr<const telemetry_packet_t> fake_telemetry_packet() {
     telemetry_packet_t p;
 
@@ -34,10 +33,7 @@ static std::shared_ptr<const telemetry_packet_t> fake_telemetry_packet() {
     p.timestamp = static_cast<time_t>(1123581321);
 
     // Payload
-
-    /* If I didn't mess up, this lambda delete function should receive a pointer to the first
-     * element of a byte array, casted back from a void pointer (which is used by struct).
-     * N.B. Don't take my word on this :) */
+    // Cast to void pointer as used by structs, when passing to deleter cast back to our type
     auto payload = std::shared_ptr<const void>(
         static_cast<const void *>(new uint8_t[sizeof(data)]),
         [](const void *k) {

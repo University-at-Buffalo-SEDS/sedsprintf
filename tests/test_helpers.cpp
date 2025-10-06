@@ -69,22 +69,71 @@ static void compare_packets(const ConstPacketPtr &p1, const ConstPacketPtr &p2) 
         int res = std::memcmp(p1->data.get(), p2->data.get(), p1->message_type.data_size);
         ASSERT_EQ(0, res);
     }
+
+    /* More tolerant (but boilerplate) version
+     * Casts from the void pointer according to inferred type. */
+    
+    // if (p1->data == p2->data) return;
+
+    // auto [t, s] = sedsprintf::infer_element_type(p1, ElementType::Auto);
+    // size_t num_elems = p1->message_type.data_size / s;
+    // switch (t) {
+    //     case ElementType::F64:
+    //     {
+    //         auto val1 = static_cast<const double *>(p1->data.get());
+    //         auto val2 = static_cast<const double *>(p2->data.get());
+    //         for (size_t i = 0; i < num_elems; i++)
+    //             ASSERT_DOUBLE_EQ(val1[i], val2[i]);
+    //         break;
+    //     }
+    //     case ElementType::F32:
+    //     {
+    //         auto val1 = static_cast<const float *>(p1->data.get());
+    //         auto val2 = static_cast<const float *>(p2->data.get());
+    //         for (size_t i = 0; i < num_elems; i++)
+    //             ASSERT_FLOAT_EQ(val1[i], val2[i]);
+    //         break;
+    //     }
+    //     case ElementType::U32:
+    //     {
+    //         auto val1 = static_cast<const uint32_t *>(p1->data.get());
+    //         auto val2 = static_cast<const uint32_t *>(p2->data.get());
+    //         for (size_t i = 0; i < num_elems; i++)
+    //             ASSERT_EQ(val1[i], val2[i]);
+    //         break;
+    //     }
+    //     case ElementType::U16:
+    //     {
+    //         auto val1 = static_cast<const uint16_t *>(p1->data.get());
+    //         auto val2 = static_cast<const uint16_t *>(p2->data.get());
+    //         for (size_t i = 0; i < num_elems; i++)
+    //             ASSERT_EQ(val1[i], val2[i]);
+    //         break;
+    //     }
+    //     default:
+    //     {
+    //         auto val1 = static_cast<const uint8_t *>(p1->data.get());
+    //         auto val2 = static_cast<const uint8_t *>(p2->data.get());
+    //         for (size_t i = 0; i < num_elems; i++)
+    //             ASSERT_EQ(val1[i], val2[i]);
+    //     }
+    // }
 }
 
 TEST(Helpers, PacketHexToString) {
-    std::string expect;
+    std::string expect, res;
     const auto fake_packet = fake_telemetry_packet();
 
     // Passing nullptr
     expect = "ERROR: null packet or data";
-    std::string invalid = sedsprintf::packet_to_hex_string(nullptr, nullptr, 0);
-    ASSERT_EQ(expect, invalid);
+    res = sedsprintf::packet_to_hex_string(nullptr, nullptr, 0);
+    ASSERT_EQ(expect, res);
 
     // Passing normal packet
     expect = "Type: GPS_DATA, Size: 3, Endpoints: [SD_CARD, RADIO], Timestamp: 1123581321"
                 ", Payload (hex): 0x13 0x21 0x34";
-    std::string wrong_explicit_size = sedsprintf::packet_to_hex_string(fake_packet, fake_packet->data, 0);
-    ASSERT_EQ(expect, wrong_explicit_size);
+    res = sedsprintf::packet_to_hex_string(fake_packet, fake_packet->data, 0);
+    ASSERT_EQ(expect, res);
 }
 
 TEST(Helpers, CopyTelemetryPacket) {

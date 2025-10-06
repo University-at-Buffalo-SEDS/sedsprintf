@@ -5,15 +5,15 @@
 #include "enum_setup.h"
 #include "telemetry_packet.h"
 #include "telemetry_router.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
-#include <sys/types.h>
 
-// Creates a deterministic telemetry buffer
-static std::shared_ptr<const telemetry_packet_t> fake_telemetry_packet() {
+// Creates a deterministic telemetry packet
+static std::shared_ptr<telemetry_packet_t> fake_telemetry_packet() {
     telemetry_packet_t p;
 
     constexpr uint8_t data[message_elements[GPS_DATA]] = {
@@ -46,19 +46,62 @@ static std::shared_ptr<const telemetry_packet_t> fake_telemetry_packet() {
     std::memcpy(raw_ptr, data, sizeof(data));
     p.data = payload;
     
-    return std::make_shared<const telemetry_packet_t>(p);
+    return std::make_shared<telemetry_packet_t>(p);
 }
 
-TEST(Converters, PacketHexToString) {
-    std::string expect;
+// Performs element-by-element comparison of two packets. To be used in tests.
+static void compare_packets(const ConstPacketPtr &p1, const ConstPacketPtr &p2) {
+    EXPECT_EQ(p1->timestamp, p2->timestamp);
 
+    ASSERT_EQ(p1->message_type.type, p2->message_type.type);
+    ASSERT_EQ(p1->message_type.data_size, p2->message_type.data_size);
+    ASSERT_EQ(p1->message_type.num_endpoints, p2->message_type.num_endpoints);
+
+    if (p1->message_type.endpoints != p2->message_type.endpoints) {
+        for (size_t i = 0; i < p1->message_type.num_endpoints; i++) {
+            ASSERT_EQ(p1->message_type.endpoints[i], p2->message_type.endpoints[i]);
+        }
+    }
+
+    /* This logic is effective for deterministic (fake) packets used in tests.
+     * Real packets may differ to a negligible extent, making memcmp() produce undesired results. */
+    if (p1->data != p2->data) {
+        int res = std::memcmp(p1->data.get(), p2->data.get(), p1->message_type.data_size);
+        ASSERT_EQ(0, res);
+    }
+}
+
+TEST(Helpers, PacketHexToString) {
+    std::string expect;
+    const auto fake_packet = fake_telemetry_packet();
+
+    // Passing nullptr
     expect = "ERROR: null packet or data";
     std::string invalid = sedsprintf::packet_to_hex_string(nullptr, nullptr, 0);
     ASSERT_EQ(expect, invalid);
 
+    // Passing normal packet
     expect = "Type: GPS_DATA, Size: 3, Endpoints: [SD_CARD, RADIO], Timestamp: 1123581321"
                 ", Payload (hex): 0x13 0x21 0x34";
-    auto fake_packet = fake_telemetry_packet();
     std::string wrong_explicit_size = sedsprintf::packet_to_hex_string(fake_packet, fake_packet->data, 0);
     ASSERT_EQ(expect, wrong_explicit_size);
+}
+
+TEST(Helpers, CopyTelemetryPacket) {
+    SEDSPRINTF_STATUS st;
+    const auto src = fake_telemetry_packet();
+
+    // Passing nullptr for destination 
+    st = sedsprintf::copy_telemetry_packet(nullptr, src);
+    ASSERT_EQ(SEDSPRINTF_ERROR, st);
+
+    // Passing the same pointer for source and destination
+    st = sedsprintf::copy_telemetry_packet(src, src);
+    ASSERT_EQ(SEDSPRINTF_OK, st);
+
+    // Passing two distinct non-null pointers
+    PacketPtr dest = std::make_shared<telemetry_packet_t>();
+    st = sedsprintf::copy_telemetry_packet(dest, src);
+    EXPECT_EQ(SEDSPRINTF_OK, st);
+    compare_packets(dest, src);
 }

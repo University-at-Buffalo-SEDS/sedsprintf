@@ -12,7 +12,7 @@
 // Therefore, if you are trying to optimize
 // this routine, and it fails (it most surely will),
 // please increase this counter as a warning for the next person:
-// total hours_wasted_here = 24
+// total hours_wasted_here = 28
 
 
 // ---- Fixed wire sizes (portable) ----

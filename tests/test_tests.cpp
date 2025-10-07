@@ -211,3 +211,42 @@ TEST(PacketToStringTest, ToStringWorks)
 
     EXPECT_EQ(packet_string, expected.str());
 }
+/*
+===================================================================================================================
+                                                    Kashfy's Test Cases Start Here
+===================================================================================================================
+*/
+
+
+// SerializeTest handles null serialized buffer
+
+TEST(SerializeTest, SerializePacketHandlesNullPacket)
+{
+    auto serialized = make_serialized_buffer(100);
+    ASSERT_EQ(serialize_packet(nullptr, serialized), SEDSPRINTF_ERROR);
+}
+
+TEST(SerializeTest, SerializeTest_serialized_packet_hand_Test)
+{
+    auto serialized = make_serialized_buffer(100);
+    ASSERT_EQ(serialize_packet(nullptr, serialized), SEDSPRINTF_ERROR);
+}
+
+// REMINDER TO SELF ASK RYLAN HOW #include <gtest/gtest.h> WORKS AND HOW TO WRITE GOOD TEST CASES
+
+/*
+TEST(SerializeTest, get_packet_size)
+{
+    constexpr float data[message_elements[GPS_DATA]] = {
+        5.214141324324f, 3.1342143243214132f, 1.123123123123f
+    };
+
+    auto packet = std::make_shared<telemetry_packet_t>();
+    packet->message_type = message_type[GPS_DATA];
+    packet->timestamp = 0;
+    packet->data = make_payload_copy(data);
+
+    size_t size = get_packet_size(*packet);
+    ASSERT_EQ(size, 24 + packet->message_type.num_endpoints * 4 + packet->message_type.data_size);
+}
+*/

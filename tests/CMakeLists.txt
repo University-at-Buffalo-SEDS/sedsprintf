@@ -7,6 +7,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(run_tests
         test_tests.cpp
+        test_helpers.cpp
 )
 
 target_link_libraries(run_tests PRIVATE

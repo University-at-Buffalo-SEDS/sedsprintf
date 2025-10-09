@@ -151,6 +151,6 @@ TEST(Helpers, CopyTelemetryPacket) {
     // Passing two distinct non-null pointers
     PacketPtr dest = std::make_shared<telemetry_packet_t>();
     st = sedsprintf::copy_telemetry_packet(dest, src);
-    EXPECT_EQ(SEDSPRINTF_OK, st);
+    ASSERT_EQ(SEDSPRINTF_OK, st);
     compare_packets(dest, src);
 }

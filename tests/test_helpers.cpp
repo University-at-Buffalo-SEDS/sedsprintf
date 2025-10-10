@@ -13,7 +13,7 @@
 #include <string>
 
 // Creates a deterministic telemetry packet
-static std::shared_ptr<telemetry_packet_t> fake_telemetry_packet() {
+std::shared_ptr<telemetry_packet_t> fake_telemetry_packet() {
     telemetry_packet_t p;
 
     constexpr uint8_t data[message_elements[GPS_DATA]] = {
@@ -50,7 +50,7 @@ static std::shared_ptr<telemetry_packet_t> fake_telemetry_packet() {
 }
 
 // Performs element-by-element comparison of two packets. To be used in tests.
-static void compare_packets(const ConstPacketPtr &p1, const ConstPacketPtr &p2) {
+void compare_packets(const ConstPacketPtr &p1, const ConstPacketPtr &p2) {
     EXPECT_EQ(p1->timestamp, p2->timestamp);
 
     ASSERT_EQ(p1->message_type.type, p2->message_type.type);

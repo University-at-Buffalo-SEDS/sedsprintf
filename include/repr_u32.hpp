@@ -4,7 +4,7 @@
 #include <type_traits>
 
 // The ReprU32Enum “trait” for enums represented as u32 in serialized form.
-template <typename E, typename Enable = void>
+template<typename E, typename Enable = void>
 struct ReprU32Enum; // no default; must be specialized by the macro below
 
 // Helper macro to specialize ReprU32Enum for a concrete enum type E,

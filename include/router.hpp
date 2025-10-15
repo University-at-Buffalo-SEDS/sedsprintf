@@ -35,7 +35,8 @@ namespace seds
     struct Clock
     {
         virtual ~Clock() = default;
-        virtual std::uint64_t now_ms() const = 0;
+
+        [[nodiscard]] virtual std::uint64_t now_ms() const = 0;
     };
 
     // Helper to wrap a lambda/std::function<u64()> as Clock
@@ -44,8 +45,11 @@ namespace seds
     {
         struct Impl : Clock
         {
-            explicit Impl(F f) : f_(std::move(f)) {}
-            std::uint64_t now_ms() const override { return f_(); }
+            explicit Impl(F f) : f_(std::move(f))
+            {
+            }
+
+            [[nodiscard]] std::uint64_t now_ms() const override { return f_(); }
             F f_;
         };
         return std::unique_ptr<Clock>(new Impl(std::move(fn)));
@@ -57,9 +61,12 @@ namespace seds
         std::vector<EndpointHandler> handlers;
 
         BoardConfig() = default;
-        explicit BoardConfig(std::vector<EndpointHandler> h) : handlers(std::move(h)) {}
 
-        bool is_local_endpoint(DataEndpoint ep) const
+        explicit BoardConfig(std::vector<EndpointHandler> h) : handlers(std::move(h))
+        {
+        }
+
+        [[nodiscard]] bool is_local_endpoint(DataEndpoint ep) const
         {
             return std::any_of(handlers.begin(), handlers.end(),
                                [&](const EndpointHandler & h) { return h.endpoint == ep; });
@@ -73,7 +80,9 @@ namespace seds
     struct LeBytes
     {
         static constexpr std::size_t WIDTH = 0; // must be specialized
-        static void write_le(T, std::uint8_t *) {} // must be specialized
+        static void write_le(T, std::uint8_t *)
+        {
+        } // must be specialized
     };
 
     // Encode a slice of T:LeBytes to a single contiguous LE buffer.
@@ -105,7 +114,7 @@ namespace seds
     class Router
     {
     public:
-        using TransmitFn = std::function<TelemetryResult<void*>(const std::vector<std::uint8_t>&)>;
+        using TransmitFn = std::function<TelemetryResult<void *>(const std::vector<std::uint8_t> &)>;
         // Tx: std::function<TelemetryResult<void*>(const std::vector<uint8_t>&)>
         template<typename Tx>
         Router(std::optional<Tx> transmit, BoardConfig cfg, std::unique_ptr<Clock> clock)
@@ -121,21 +130,34 @@ namespace seds
 
         // Queues mgmt
         TelemetryResult<void *> process_send_queue();
+
         TelemetryResult<void *> process_all_queues();
+
         void clear_queues();
+
         void clear_rx_queue();
+
         void clear_tx_queue();
+
         TelemetryResult<void *> process_tx_queue_with_timeout(std::uint32_t timeout_ms);
+
         TelemetryResult<void *> process_rx_queue_with_timeout(std::uint32_t timeout_ms);
+
         TelemetryResult<void *> process_all_queues_with_timeout(std::uint32_t timeout_ms);
+
         TelemetryResult<void *> queue_tx_message(TelemetryPacket pkt);
+
         TelemetryResult<void *> process_received_queue();
+
         TelemetryResult<void *> rx_serialized_packet_to_queue(const std::vector<std::uint8_t> & bytes);
+
         TelemetryResult<void *> rx_packet_to_queue(TelemetryPacket pkt);
 
         // Core ops
         TelemetryResult<void *> send(const TelemetryPacket & pkt);
+
         TelemetryResult<void *> receive_serialized(const std::vector<std::uint8_t> & bytes);
+
         TelemetryResult<void *> receive(const TelemetryPacket & pkt);
 
         // Generic logging over LeBytes
@@ -169,6 +191,7 @@ namespace seds
 
     private:
         TelemetryResult<void *> handle_rx_queue_item(RxQueueItem item);
+
         TelemetryResult<void *> handle_callback_error(const TelemetryPacket & pkt,
                                                       std::optional<DataEndpoint> dest,
                                                       const TelemetryError & e);
@@ -182,17 +205,30 @@ namespace seds
     };
 
     // ---------- LeBytes specializations (u8/u16/u32/u64, i8/i16/i32/i64, f32/f64) ----------
-    template<> struct LeBytes<std::uint8_t>  { static constexpr std::size_t WIDTH = 1;  static void write_le(std::uint8_t  v, std::uint8_t * out){ out[0] = v; } };
-    template<> struct LeBytes<std::uint16_t> {
+    template<>
+    struct LeBytes<std::uint8_t>
+    {
+        static constexpr std::size_t WIDTH = 1;
+        static void write_le(std::uint8_t v, std::uint8_t * out) { out[0] = v; }
+    };
+
+    template<>
+    struct LeBytes<std::uint16_t>
+    {
         static constexpr std::size_t WIDTH = 2;
+
         static void write_le(std::uint16_t v, std::uint8_t * out)
         {
             out[0] = static_cast<std::uint8_t>(v & 0xFFu);
             out[1] = static_cast<std::uint8_t>((v >> 8) & 0xFFu);
         }
     };
-    template<> struct LeBytes<std::uint32_t> {
+
+    template<>
+    struct LeBytes<std::uint32_t>
+    {
         static constexpr std::size_t WIDTH = 4;
+
         static void write_le(std::uint32_t v, std::uint8_t * out)
         {
             out[0] = static_cast<std::uint8_t>(v & 0xFFu);
@@ -201,42 +237,66 @@ namespace seds
             out[3] = static_cast<std::uint8_t>((v >> 24) & 0xFFu);
         }
     };
-    template<> struct LeBytes<std::uint64_t> {
+
+    template<>
+    struct LeBytes<std::uint64_t>
+    {
         static constexpr std::size_t WIDTH = 8;
+
         static void write_le(std::uint64_t v, std::uint8_t * out)
         {
             for (int i = 0; i < 8; ++i) out[i] = static_cast<std::uint8_t>((v >> (8 * i)) & 0xFFu);
         }
     };
 
-    template<> struct LeBytes<std::int8_t>  { static constexpr std::size_t WIDTH = 1; static void write_le(std::int8_t  v, std::uint8_t * out){ out[0] = static_cast<std::uint8_t>(v); } };
-    template<> struct LeBytes<std::int16_t> {
+    template<>
+    struct LeBytes<std::int8_t>
+    {
+        static constexpr std::size_t WIDTH = 1;
+        static void write_le(std::int8_t v, std::uint8_t * out) { out[0] = static_cast<std::uint8_t>(v); }
+    };
+
+    template<>
+    struct LeBytes<std::int16_t>
+    {
         static constexpr std::size_t WIDTH = 2;
+
         static void write_le(std::int16_t v, std::uint8_t * out)
         {
-            std::uint16_t u = static_cast<std::uint16_t>(v);
+            auto u = static_cast<std::uint16_t>(v);
             LeBytes<std::uint16_t>::write_le(u, out);
         }
     };
-    template<> struct LeBytes<std::int32_t> {
+
+    template<>
+    struct LeBytes<std::int32_t>
+    {
         static constexpr std::size_t WIDTH = 4;
+
         static void write_le(std::int32_t v, std::uint8_t * out)
         {
-            std::uint32_t u = static_cast<std::uint32_t>(v);
+            auto u = static_cast<std::uint32_t>(v);
             LeBytes<std::uint32_t>::write_le(u, out);
         }
     };
-    template<> struct LeBytes<std::int64_t> {
+
+    template<>
+    struct LeBytes<std::int64_t>
+    {
         static constexpr std::size_t WIDTH = 8;
+
         static void write_le(std::int64_t v, std::uint8_t * out)
         {
-            std::uint64_t u = static_cast<std::uint64_t>(v);
+            auto u = static_cast<std::uint64_t>(v);
             LeBytes<std::uint64_t>::write_le(u, out);
         }
     };
 
-    template<> struct LeBytes<float> {
+    template<>
+    struct LeBytes<float>
+    {
         static constexpr std::size_t WIDTH = 4;
+
         static void write_le(float v, std::uint8_t * out)
         {
             static_assert(sizeof(float) == 4, "float must be 32-bit");
@@ -245,8 +305,12 @@ namespace seds
             LeBytes<std::uint32_t>::write_le(u, out);
         }
     };
-    template<> struct LeBytes<double> {
+
+    template<>
+    struct LeBytes<double>
+    {
         static constexpr std::size_t WIDTH = 8;
+
         static void write_le(double v, std::uint8_t * out)
         {
             static_assert(sizeof(double) == 8, "double must be 64-bit");
@@ -272,17 +336,18 @@ namespace seds
 
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload_vec));
         TelemetryResult<TelemetryPacket> pkt_res =
-            TelemetryPacket::New(ty,
-                                 std::vector<DataEndpoint>(meta.endpoints, meta.endpoints + meta.num_endpoints),
-                                 DEVICE_IDENTIFIER,
-                                 timestamp,
-                                 std::move(payload_arc));
+                TelemetryPacket::New(ty,
+                                     std::vector<DataEndpoint>(meta.endpoints, meta.endpoints + meta.num_endpoints),
+                                     DEVICE_IDENTIFIER,
+                                     timestamp,
+                                     std::move(payload_arc));
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
         return send(pkt_res.unwrap());
     }
 
     template<typename T>
-    inline TelemetryResult<void *> Router::log_queue(DataType ty, const T * data, std::size_t n, std::uint64_t timestamp)
+    inline TelemetryResult<void *> Router::log_queue(DataType ty, const T * data, std::size_t n,
+                                                     std::uint64_t timestamp)
     {
         const auto & meta = message_meta(ty);
         const std::size_t got = n * LeBytes<T>::WIDTH;
@@ -296,13 +361,12 @@ namespace seds
 
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload_vec));
         TelemetryResult<TelemetryPacket> pkt_res =
-            TelemetryPacket::New(ty,
-                                 std::vector<DataEndpoint>(meta.endpoints, meta.endpoints + meta.num_endpoints),
-                                 DEVICE_IDENTIFIER,
-                                 timestamp,
-                                 std::move(payload_arc));
+                TelemetryPacket::New(ty,
+                                     std::vector<DataEndpoint>(meta.endpoints, meta.endpoints + meta.num_endpoints),
+                                     DEVICE_IDENTIFIER,
+                                     timestamp,
+                                     std::move(payload_arc));
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
         return queue_tx_message(pkt_res.unwrap());
     }
-
 } // namespace seds

@@ -2,14 +2,16 @@
 #include <cstdio>
 #include <cstring>
 #include "serialize.hpp"
-extern "C" int swprintf(wchar_t *s, size_t n, const wchar_t *fmt, ...);
+
+extern "C" int swprintf(wchar_t * s, size_t n, const wchar_t * fmt, ...);
+
 // Create a TU-level undefined reference without any runtime cost.
-static void* const s_force_link_swprintf = (void*)&swprintf;
+static void * const s_force_link_swprintf = (void *) &swprintf;
 
 namespace seds
 {
     // Simple stdout fallback (works under std; no-op alternative could be added)
-    static inline void fallback_stdout(const std::string & msg)
+    static void fallback_stdout(const std::string & msg)
     {
         std::printf("%s\n", msg.c_str());
     }
@@ -22,16 +24,14 @@ namespace seds
         {
             TelemetryPacket pkt = std::move(transmit_queue_.back());
             transmit_queue_.pop_back();
-            auto r = send(pkt);
-            if (r.is_err()) return r;
+            if (auto r = send(pkt); r.is_err()) return r;
         }
         return TelemetryResult<void *>::Ok(nullptr);
     }
 
     TelemetryResult<void *> Router::process_all_queues()
     {
-        auto r1 = process_send_queue();
-        if (r1.is_err()) return r1;
+        if (auto r1 = process_send_queue(); r1.is_err()) return r1;
         return process_received_queue();
     }
 
@@ -51,8 +51,7 @@ namespace seds
         {
             TelemetryPacket pkt = std::move(transmit_queue_.back());
             transmit_queue_.pop_back();
-            auto r = send(pkt);
-            if (r.is_err()) return r;
+            if (auto r = send(pkt); r.is_err()) return r;
             if (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)) break;
         }
         return TelemetryResult<void *>::Ok(nullptr);
@@ -64,10 +63,7 @@ namespace seds
         {
             return receive(std::get<TelemetryPacket>(item));
         }
-        else
-        {
-            return receive_serialized(std::get<std::vector<std::uint8_t> >(item));
-        }
+        return receive_serialized(std::get<std::vector<std::uint8_t> >(item));
     }
 
     TelemetryResult<void *> Router::process_rx_queue_with_timeout(std::uint32_t timeout_ms)
@@ -77,8 +73,7 @@ namespace seds
         {
             RxQueueItem it = std::move(received_queue_.back());
             received_queue_.pop_back();
-            auto r = handle_rx_queue_item(std::move(it));
-            if (r.is_err()) return r;
+            if (auto r = handle_rx_queue_item(std::move(it)); r.is_err()) return r;
             if (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)) break;
         }
         return TelemetryResult<void *>::Ok(nullptr);
@@ -97,8 +92,7 @@ namespace seds
             {
                 TelemetryPacket pkt = std::move(transmit_queue_.back());
                 transmit_queue_.pop_back();
-                auto r = send(pkt);
-                if (r.is_err()) return r;
+                if (auto r = send(pkt); r.is_err()) return r;
                 did_any = true;
             }
 
@@ -106,8 +100,7 @@ namespace seds
             {
                 RxQueueItem it = std::move(received_queue_.back());
                 received_queue_.pop_back();
-                auto r = handle_rx_queue_item(std::move(it));
-                if (r.is_err()) return r;
+                if (auto r = handle_rx_queue_item(std::move(it)); r.is_err()) return r;
                 did_any = true;
             }
 
@@ -123,8 +116,7 @@ namespace seds
 
     TelemetryResult<void *> Router::queue_tx_message(TelemetryPacket pkt)
     {
-        auto v = pkt.Validate();
-        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        if (auto v = pkt.Validate(); v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
         transmit_queue_.push_back(std::move(pkt));
         return TelemetryResult<void *>::Ok(nullptr);
     }
@@ -135,8 +127,7 @@ namespace seds
         {
             RxQueueItem it = std::move(received_queue_.back());
             received_queue_.pop_back();
-            auto r = handle_rx_queue_item(std::move(it));
-            if (r.is_err()) return r;
+            if (auto r = handle_rx_queue_item(std::move(it)); r.is_err()) return r;
         }
         return TelemetryResult<void *>::Ok(nullptr);
     }
@@ -149,8 +140,7 @@ namespace seds
 
     TelemetryResult<void *> Router::rx_packet_to_queue(TelemetryPacket pkt)
     {
-        auto v = pkt.Validate();
-        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        if (auto v = pkt.Validate(); v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
         received_queue_.emplace_back(std::move(pkt));
         return TelemetryResult<void *>::Ok(nullptr);
     }
@@ -241,14 +231,13 @@ namespace seds
 
     TelemetryResult<void *> Router::send(const TelemetryPacket & pkt)
     {
-        auto v = pkt.Validate();
-        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        if (auto v = pkt.Validate(); v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
 
         // Decide whether to transmit remotely (any endpoint that is NOT local)
         bool send_remote = false;
         if (pkt.endpoints)
         {
-            for (auto ep: *pkt.endpoints)
+            for (const auto ep: *pkt.endpoints)
             {
                 if (!cfg_.is_local_endpoint(ep))
                 {
@@ -264,7 +253,7 @@ namespace seds
         if (send_remote && transmit_)
         {
             bool ok = false;
-            TelemetryError last_err = TelemetryError::BadArg();
+            TelemetryError last_err;
             for (std::size_t i = 0; i < MAX_NUMBER_OF_RETRYS; ++i)
             {
                 auto r = transmit_(bytes);
@@ -277,8 +266,7 @@ namespace seds
             }
             if (!ok)
             {
-                auto h = handle_callback_error(pkt, std::nullopt, last_err);
-                if (h.is_err()) return h;
+                if (const auto h = handle_callback_error(pkt, std::nullopt, last_err); h.is_err()) return h;
                 return TelemetryResult<void *>::Err(TelemetryError::HandlerError("TX failed"));
             }
         }
@@ -288,15 +276,15 @@ namespace seds
         {
             for (DataEndpoint dest: *pkt.endpoints)
             {
-                for (const auto & h: cfg_.handlers)
+                for (const auto & [endpoint, handler]: cfg_.handlers)
                 {
-                    if (h.endpoint == dest)
+                    if (endpoint == dest)
                     {
                         bool ok = false;
-                        TelemetryError last_err = TelemetryError::BadArg();
+                        TelemetryError last_err;
                         for (std::size_t i = 0; i < MAX_NUMBER_OF_RETRYS; ++i)
                         {
-                            auto r = h.handler(pkt);
+                            auto r = handler(pkt);
                             if (r.is_ok())
                             {
                                 ok = true;
@@ -306,8 +294,7 @@ namespace seds
                         }
                         if (!ok)
                         {
-                            auto cb = handle_callback_error(pkt, dest, last_err);
-                            if (cb.is_err()) return cb;
+                            if (const auto cb = handle_callback_error(pkt, dest, last_err); cb.is_err()) return cb;
                             return TelemetryResult<void *>::Err(
                                 TelemetryError::HandlerError("local handler failed"));
                         }
@@ -323,30 +310,28 @@ namespace seds
     {
         auto pkt_res = deserialize_packet(bytes);
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
-        auto pkt = pkt_res.unwrap();
-        auto v = pkt.Validate();
-        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        const auto & pkt = pkt_res.unwrap();
+        if (auto v = pkt.Validate(); v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
         return receive(pkt);
     }
 
     TelemetryResult<void *> Router::receive(const TelemetryPacket & pkt)
     {
-        auto v = pkt.Validate();
-        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        if (auto v = pkt.Validate(); v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
 
         if (pkt.endpoints)
         {
             for (DataEndpoint dest: *pkt.endpoints)
             {
-                for (const auto & h: cfg_.handlers)
+                for (const auto & [endpoint, handler]: cfg_.handlers)
                 {
-                    if (h.endpoint == dest)
+                    if (endpoint == dest)
                     {
                         bool ok = false;
-                        TelemetryError last_err = TelemetryError::BadArg();
+                        TelemetryError last_err;
                         for (std::size_t i = 0; i < MAX_NUMBER_OF_RETRYS; ++i)
                         {
-                            auto r = h.handler(pkt);
+                            auto r = handler(pkt);
                             if (r.is_ok())
                             {
                                 ok = true;
@@ -356,8 +341,7 @@ namespace seds
                         }
                         if (!ok)
                         {
-                            auto cb = handle_callback_error(pkt, dest, last_err);
-                            if (cb.is_err()) return cb;
+                            if (auto cb = handle_callback_error(pkt, dest, last_err); cb.is_err()) return cb;
                         }
                     }
                 }
@@ -366,5 +350,4 @@ namespace seds
 
         return TelemetryResult<void *>::Ok(nullptr);
     }
-
 } // namespace seds

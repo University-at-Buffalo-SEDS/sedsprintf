@@ -24,8 +24,8 @@ namespace seds
         static Result Ok(T v) { return Result(std::move(v)); }
         static Result Err(E e) { return Result(std::move(e)); }
 
-        bool is_ok() const { return ok_; }
-        bool is_err() const { return !ok_; }
+        [[nodiscard]] bool is_ok() const { return ok_; }
+        [[nodiscard]] bool is_err() const { return !ok_; }
 
         const T & unwrap() const { return value_; }
         T & unwrap() { return value_; }
@@ -167,42 +167,43 @@ namespace seds
             std::uint64_t timestamp);
 
         // Validate internal invariants.
-        TelemetryResult<void *> Validate() const;
+        [[nodiscard]] TelemetryResult<void *> Validate() const;
 
         // Header line without data payload.
-        std::string HeaderString() const;
+        [[nodiscard]] std::string HeaderString() const;
 
         // If type is String, decode UTF-8 with trailing NULs trimmed.
-        std::optional<std::string> DataAsUtf8() const;
+        [[nodiscard]] std::optional<std::string> DataAsUtf8() const;
 
         // Full pretty string including decoded data portion.
-        std::string ToString() const;
+        [[nodiscard]] std::string ToString() const;
 
         // Hex view; includes header and hex list.
-        std::string ToHexString() const;
+        [[nodiscard]] std::string ToHexString() const;
 
     private:
         void BuildEndpointString(std::string & out) const;
 
-        MessageDataType MsgTy() const;
+        [[nodiscard]] MessageDataType MsgTy() const;
 
-        std::optional<std::string> TrimmedStr(const std::vector<std::uint8_t> & bytes) const;
+        static std::optional<std::string> TrimmedStr(const std::vector<std::uint8_t> & bytes);
     };
 
     // ostream support (Rust Display)
     std::ostream & operator<<(std::ostream & os, const TelemetryPacket & pkt);
 
-        inline bool CopyTelemetryPacket(TelemetryPacket * dest, const TelemetryPacket * src)
-        {
-            if (!dest || !src) return false;
-            if (dest == src) return true;
-            dest->ty = src->ty;
-            dest->data_size = src->data_size;
-            dest->payload = src->payload;
-            dest->endpoints = src->endpoints;
-            dest->sender = src->sender;
-            dest->timestamp = src->timestamp;
-            return true;
-        }
+    inline bool CopyTelemetryPacket(TelemetryPacket * dest, const TelemetryPacket * src)
+    {
+        if (!dest || !src) return false;
+        if (dest == src) return true;
+        dest->ty = src->ty;
+        dest->data_size = src->data_size;
+        dest->payload = src->payload;
+        dest->endpoints = src->endpoints;
+        dest->sender = src->sender;
+        dest->timestamp = src->timestamp;
+        return true;
     }
- // namespace seds
+}
+
+// namespace seds

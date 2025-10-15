@@ -155,10 +155,10 @@ namespace seds
                 break;
             }
         }
-        return TrimmedStr(std::vector<std::uint8_t>(bytes.begin(), bytes.begin() + end));
+        return TrimmedStr(std::vector(bytes.begin(), bytes.begin() + end));
     }
 
-    std::optional<std::string> TelemetryPacket::TrimmedStr(const std::vector<std::uint8_t> & bytes) const
+    std::optional<std::string> TelemetryPacket::TrimmedStr(const std::vector<std::uint8_t> & bytes)
     {
         if (bytes.empty()) return std::nullopt;
         // "UTF-8" trust as Rust did (unwrap_or("")); we’ll replace invalid with empty.
@@ -271,13 +271,16 @@ namespace seds
         return s;
     }
 
-    std::string TelemetryPacket::ToHexString() const {
+    std::string TelemetryPacket::ToHexString() const
+    {
         std::string s = HeaderString();
 
         std::string hex;
-        if (payload && !payload->empty()) {
+        if (payload && !payload->empty())
+        {
             hex.reserve(payload->size() * 5); // " 0x??"
-            for (uint8_t b : *payload) {
+            for (uint8_t b: *payload)
+            {
                 char buf[6]; // " 0x" + 2 hex + '\0'
                 std::snprintf(buf, sizeof(buf), " 0x%02x", static_cast<unsigned>(b));
                 hex += buf;

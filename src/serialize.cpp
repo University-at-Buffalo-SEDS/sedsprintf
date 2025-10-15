@@ -58,14 +58,14 @@ namespace seds
         out.reserve(cap);
 
         // type
-        const std::uint32_t ty = static_cast<std::uint32_t>(pkt.ty);
+        const auto ty = static_cast<std::uint32_t>(pkt.ty);
         out.push_back(static_cast<std::uint8_t>(ty & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((ty >> 8) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((ty >> 16) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((ty >> 24) & 0xFFu));
 
         // data_size (u32)
-        const std::uint32_t dsz = static_cast<std::uint32_t>(pkt.data_size);
+        const auto dsz = static_cast<std::uint32_t>(pkt.data_size);
         out.push_back(static_cast<std::uint8_t>(dsz & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((dsz >> 8) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((dsz >> 16) & 0xFFu));
@@ -74,7 +74,7 @@ namespace seds
         // sender_len (u32) and later append sender bytes
         const char * sender_c = pkt.sender ? pkt.sender : "";
         const std::size_t sender_len_sz = std::strlen(sender_c);
-        const std::uint32_t sender_len = static_cast<std::uint32_t>(sender_len_sz);
+        const auto sender_len = static_cast<std::uint32_t>(sender_len_sz);
         out.push_back(static_cast<std::uint8_t>(sender_len & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((sender_len >> 8) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((sender_len >> 16) & 0xFFu));
@@ -88,7 +88,7 @@ namespace seds
         }
 
         // num_endpoints (u32)
-        const std::uint32_t nep = static_cast<std::uint32_t>(pkt.endpoints ? pkt.endpoints->size() : 0);
+        const auto nep = static_cast<std::uint32_t>(pkt.endpoints ? pkt.endpoints->size() : 0);
         out.push_back(static_cast<std::uint8_t>(nep & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((nep >> 8) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((nep >> 16) & 0xFFu));
@@ -99,7 +99,7 @@ namespace seds
         {
             for (DataEndpoint ep: *pkt.endpoints)
             {
-                const std::uint32_t v = static_cast<std::uint32_t>(ep);
+                const auto v = static_cast<std::uint32_t>(ep);
                 out.push_back(static_cast<std::uint8_t>(v & 0xFFu));
                 out.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu));
                 out.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFFu));
@@ -144,11 +144,11 @@ namespace seds
 
         auto dsz_u32 = r.read_u32(&err);
         if (!dsz_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
-        const std::size_t dsz = static_cast<std::size_t>(*dsz_u32);
+        const auto dsz = static_cast<std::size_t>(*dsz_u32);
 
         auto sender_len_u32 = r.read_u32(&err);
         if (!sender_len_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
-        const std::size_t sender_len = static_cast<std::size_t>(*sender_len_u32);
+        const auto sender_len = static_cast<std::size_t>(*sender_len_u32);
 
         auto ts_u64 = r.read_u64(&err);
         if (!ts_u64) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
@@ -156,7 +156,7 @@ namespace seds
 
         auto nep_u32 = r.read_u32(&err);
         if (!nep_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
-        const std::size_t nep = static_cast<std::size_t>(*nep_u32);
+        const auto nep = static_cast<std::size_t>(*nep_u32);
 
         const std::size_t need =
                 header_size_bytes() + nep * ENDPOINT_ELEM_SIZE + dsz;
@@ -188,7 +188,7 @@ namespace seds
         {
             return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize("sender not UTF-8"));
         }
-        char * sender_c = new char[sender_len + 1];
+        auto sender_c = new char[sender_len + 1];
         std::memcpy(sender_c, sender_ptr, sender_len);
         sender_c[sender_len] = '\0';
 
@@ -196,7 +196,7 @@ namespace seds
         auto payload_ptr_opt = r.read_bytes(dsz, &err);
         if (!payload_ptr_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const std::uint8_t * payload_ptr = *payload_ptr_opt;
-        std::vector<std::uint8_t> payload(payload_ptr, payload_ptr + dsz);
+        std::vector payload(payload_ptr, payload_ptr + dsz);
 
         // Construct packet (mirrors Rust)
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload));
@@ -211,8 +211,7 @@ namespace seds
         pkt.payload = std::move(payload_arc);
 
         // Validate invariants similar to Rust new()/validate()
-        auto v = pkt.Validate();
-        if (v.is_err())
+        if (auto v = pkt.Validate(); v.is_err())
         {
             return TelemetryResult<TelemetryPacket>::Err(v.unwrap_err());
         }

@@ -1,112 +1,127 @@
 #pragma once
-#include <vector>
-#include <array>
 
-// include/config.hpp
-#pragma once
 #include <cstdint>
 #include <cstddef>
 #include <array>
-#include <vector>
 
-// --- Defuse bad macros coming from vendor headers (Cube/CMSIS/etc.)
-#ifdef DataType
-#  undef DataType
-#endif
-#ifdef MessageType
-#  undef MessageType
-#endif
-#ifdef MessageDataType
-#  undef MessageDataType
-#endif
-#ifdef DataEndpoint
-#  undef DataEndpoint
-#endif
 namespace seds {
 
-// ---- DataEndpoint ----
-enum class DataEndpoint : uint32_t {
-    SD_CARD = 0,
-    RADIO,
-    MAX
+// ---------------------- User Editable ----------------------
+inline constexpr const char* DEVICE_IDENTIFIER = "TEST_PLATFORM";
+
+// Mirrors Rust #[repr(u32)]
+enum class DataEndpoint : std::uint32_t {
+    SdCard = 0,
+    Radio  = 1,
 };
 
-inline const char* endpoint_to_str(DataEndpoint e) noexcept {
-    switch (e) {
-        case DataEndpoint::SD_CARD:   return "SD_CARD";
-        case DataEndpoint::RADIO:     return "RADIO";
-        default:                      return "UNKNOWN";
-    }
-}
+inline constexpr std::uint32_t MAX_VALUE_DATA_ENDPOINT =
+    static_cast<std::uint32_t>(DataEndpoint::Radio);
 
-inline DataEndpoint endpoint_from_u32(uint32_t v) noexcept {
-    if (v >= static_cast<uint32_t>(DataEndpoint::MAX))
-        return DataEndpoint::SD_CARD; // fallback
-    return static_cast<DataEndpoint>(v);
-}
-
-// ---- DataType ----
-enum class DataType : uint32_t {
-    TELEMETRY_ERROR = 0,
-    GPS_DATA,
-    IMU_DATA,
-    BATTERY_STATUS,
-    SYSTEM_STATUS,
-    BAROMETER_DATA,
-    MAX
-};
-
-inline const char* datatype_to_str(DataType t) noexcept {
-    switch (t) {
-        case DataType::GPS_DATA:        return "GPS_DATA";
-        case DataType::IMU_DATA:        return "IMU_DATA";
-        case DataType::BATTERY_STATUS:  return "BATTERY_STATUS";
-        case DataType::SYSTEM_STATUS:   return "SYSTEM_STATUS";
-        case DataType::BAROMETER_DATA:     return "BAROMETER_DATA";
-        default:                        return "UNKNOWN";
-    }
-}
-
-inline DataType datatype_from_u32(uint32_t v) noexcept {
-    if (v >= static_cast<uint32_t>(DataType::MAX))
-        return DataType::TELEMETRY_ERROR;
-    return static_cast<DataType>(v);
-}
-
-// ---- MessageDataType ----
-enum class MessageDataType : uint8_t {
+enum class MessageDataType {
+    Float32,
     UInt8,
     UInt32,
-    Float32,
     String,
-    Hex
+    Hex,
 };
 
-// ---- MessageType ----
-enum class MessageType : uint8_t {
+enum class MessageType {
     Info,
-    Error
+    Error,
 };
 
-// ---- MessageMeta ----
+inline constexpr const char* data_endpoint_as_str(DataEndpoint ep) {
+    switch (ep) {
+        case DataEndpoint::SdCard: return "SD_CARD";
+        case DataEndpoint::Radio:  return "RADIO";
+    }
+    return "UNKNOWN_ENDPOINT";
+}
+
+// Mirrors Rust #[repr(u32)]
+enum class DataType : std::uint32_t {
+    TelemetryError = 0,
+    GpsData        = 1,
+    ImuData        = 2,
+    BatteryStatus  = 3,
+    SystemStatus   = 4,
+    BarometerData  = 5,
+};
+
+inline constexpr std::uint32_t MAX_VALUE_DATA_TYPE =
+    static_cast<std::uint32_t>(DataType::BarometerData);
+
+// Rust has `pub const COUNT: usize = 6;`
+inline constexpr std::size_t DATA_TYPE_COUNT = 6;
+
+inline constexpr const char* data_type_as_str(DataType dt) {
+    switch (dt) {
+        case DataType::TelemetryError: return "TELEMETRY_ERROR";
+        case DataType::GpsData:        return "GPS_DATA";
+        case DataType::ImuData:        return "IMU_DATA";
+        case DataType::BatteryStatus:  return "BATTERY_STATUS";
+        case DataType::SystemStatus:   return "SYSTEM_STATUS";
+        case DataType::BarometerData:  return "BAROMETER_DATA";
+    }
+    return "UNKNOWN_DATA_TYPE";
+}
+
+// Fixed maximum lengths to match Rust
+inline constexpr std::size_t MAX_STRING_LENGTH = 1024;
+inline constexpr std::size_t MAX_HEX_LENGTH    = 1024;
+
+// Size per element for each MessageDataType (Rust const fn data_type_size)
+inline constexpr std::size_t data_type_size(MessageDataType dt) {
+    switch (dt) {
+        case MessageDataType::Float32: return sizeof(float);
+        case MessageDataType::UInt8:   return sizeof(std::uint8_t);
+        case MessageDataType::UInt32:  return sizeof(std::uint32_t);
+        case MessageDataType::String:  return MAX_STRING_LENGTH;
+        case MessageDataType::Hex:     return MAX_HEX_LENGTH;
+    }
+    return 0;
+}
+
+// how many elements each message carries (Rust MESSAGE_ELEMENTS)
+extern const std::array<std::size_t, DATA_TYPE_COUNT> MESSAGE_ELEMENTS;
+
+// These mirror Rust’s const arrays (MESSAGE_DATA_TYPES / MESSAGE_INFO_TYPES)
+extern const std::array<MessageDataType, DATA_TYPE_COUNT> MESSAGE_DATA_TYPES;
+extern const std::array<MessageType,      DATA_TYPE_COUNT> MESSAGE_INFO_TYPES;
+
+// ---------------------- Not User Editable ----------------------
 struct MessageMeta {
-    DataType type;
-    MessageDataType dataType;
-    MessageType msgType;
-    size_t dataSize;
-    std::vector<DataEndpoint> endpoints; // NEW: default endpoints for this message
-
+    DataType ty;
+    std::size_t data_size;
+    const DataEndpoint* endpoints;   // points to a static array
+    std::size_t num_endpoints;
 };
 
-// ---- Constants ----
-constexpr size_t MAX_MESSAGE_TYPES = static_cast<size_t>(DataType::MAX);
+// Rust: get_needed_message_size(ty) = data_type_size(MESSAGE_DATA_TYPES[ty]) * MESSAGE_ELEMENTS[ty]
+inline std::size_t get_needed_message_size(DataType ty) {
+    const auto idx = static_cast<std::size_t>(ty);
+    return data_type_size(MESSAGE_DATA_TYPES[idx]) * MESSAGE_ELEMENTS[idx];
+}
 
-extern const std::array<MessageMeta, MAX_MESSAGE_TYPES> MESSAGE_ELEMENTS;
-extern const std::array<MessageDataType, MAX_MESSAGE_TYPES> MESSAGE_DATA_TYPES;
-extern const char* DEVICE_IDENTIFIER;
+// Rust: get_info_type(ty) = MESSAGE_INFO_TYPES[ty]
+inline MessageType get_info_type(DataType ty) {
+    return MESSAGE_INFO_TYPES[static_cast<std::size_t>(ty)];
+}
 
-// ---- Utility functions ----
-const MessageMeta& message_meta(DataType t) noexcept;
-MessageType get_info_type(DataType t) noexcept;
+// Rust: static table MESSAGE_TYPES and accessor message_meta(ty)
+extern const std::array<MessageMeta, DATA_TYPE_COUNT> MESSAGE_TYPES;
+
+inline const MessageMeta& message_meta(DataType ty) {
+    return MESSAGE_TYPES[static_cast<std::size_t>(ty)];
+}
+
+// -------------- Implementation details needed by headers --------------
+namespace detail {
+    // Endpoint sets used by MESSAGE_TYPES; exposed for translation unit internal use.
+    extern const std::array<DataEndpoint, 2> ENDPOINTS_SD_AND_RADIO;
+    extern const std::array<DataEndpoint, 1> ENDPOINTS_SD_ONLY;
+    extern const std::array<DataEndpoint, 1> ENDPOINTS_RADIO_ONLY;
+} // namespace detail
 
 } // namespace seds

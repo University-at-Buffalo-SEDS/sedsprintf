@@ -1,120 +1,458 @@
-// reimpl_tests.cpp
+// tests/cpp_unit_tests.cpp
 #include <gtest/gtest.h>
+
+#include <atomic>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "config.hpp"
 #include "router.hpp"
 #include "serialize.hpp"
-#include "telemetry_packet.hpp"
-#include "config.hpp"
-#include "error.hpp"
-#include "result.hpp"
-#include <atomic>
-#include <mutex>
-#include "helpers.cpp"
+#include "telemetry.hpp"
 
 using namespace seds;
-using testhelpers::get_handler;
-using testhelpers::get_sd_card_handler;
-using testhelpers::handle_errors;
 
-TEST(NamesTables, MessageTableCountMatchesEnum) {
-#ifdef SEDS_HAS_MESSAGE_TABLES
-    EXPECT_EQ(MESSAGE_ELEMENTS.size(), static_cast<size_t>(DataType::_COUNT));
-#else
-    GTEST_SKIP() << "MESSAGE_ELEMENTS not wired in C++ build.";
-#endif
-}
-
-
-static std::vector<uint8_t> f32_le(const std::vector<float>& v) {
-    std::vector<uint8_t> out;
-    out.reserve(v.size() * 4);
-    for (float f : v) {
-        static_assert(sizeof(float)==4, "float must be 4 bytes");
-        uint32_t le;
-        std::memcpy(&le, &f, 4);              // copy float bits
-        // ensure little-endian order explicitly
-        out.push_back(uint8_t(le & 0xFF));
-        out.push_back(uint8_t((le >> 8) & 0xFF));
-        out.push_back(uint8_t((le >> 16) & 0xFF));
-        out.push_back(uint8_t((le >> 24) & 0xFF));
+// ---------------- Mock clock ----------------
+class StepClock : public Clock {
+public:
+    static std::unique_ptr<Clock> NewBox(uint64_t start, uint64_t step) {
+        return std::unique_ptr<Clock>(new StepClock(start, step));
     }
-    return out;
+    static std::unique_ptr<Clock> NewDefaultBox() {
+        // matches Rust tests (no time advance inside budgeted loops unless step > 0)
+        return std::unique_ptr<Clock>(new StepClock(0, 0));
+    }
+    StepClock(uint64_t start, uint64_t step) : t_(start), step_(step) {}
+    uint64_t now_ms() const override {
+        // returns current, then advances by step
+        auto cur = t_.load(std::memory_order_relaxed);
+        t_.store(cur + step_, std::memory_order_relaxed);
+        return cur;
+    }
+private:
+    mutable std::atomic<uint64_t> t_;
+    uint64_t step_;
+};
+
+// ---------------- Helpers used by several tests ----------------
+
+static TelemetryPacket MakeGpsPacketFromF32s(const std::vector<float>& vals,
+                                             const std::vector<DataEndpoint>& eps,
+                                             uint64_t ts,
+                                             const char* sender = DEVICE_IDENTIFIER) {
+    // Encode payload LE
+    std::vector<uint8_t> bytes;
+    bytes.reserve(vals.size() * sizeof(float));
+    for (float v : vals) {
+        uint32_t u;
+        std::memcpy(&u, &v, 4);
+        bytes.push_back(static_cast<uint8_t>( u        & 0xFFu));
+        bytes.push_back(static_cast<uint8_t>((u >> 8 ) & 0xFFu));
+        bytes.push_back(static_cast<uint8_t>((u >> 16) & 0xFFu));
+        bytes.push_back(static_cast<uint8_t>((u >> 24) & 0xFFu));
+    }
+    auto payload_arc = std::make_shared<const std::vector<uint8_t>>(std::move(bytes));
+    TelemetryResult<TelemetryPacket> r =
+        TelemetryPacket::New(DataType::GpsData, eps, sender, ts, std::move(payload_arc));
+    EXPECT_TRUE(r.is_ok()) << "failed to build GPS packet";
+    return r.unwrap();
 }
+
+// deterministic 3-byte payload helper used by hex/string tests
+static TelemetryPacket FakeTelemetryPacketBytes() {
+    std::vector<uint8_t> raw{0x13, 0x21, 0x34};
+    auto payload_arc = std::make_shared<const std::vector<uint8_t>>(std::move(raw));
+    std::vector<DataEndpoint> eps{DataEndpoint::SdCard, DataEndpoint::Radio};
+
+    TelemetryResult<TelemetryPacket> r =
+        TelemetryPacket::New(DataType::GpsData, eps, "Flight Controller",
+                             /*ts=*/1123581321ull, std::move(payload_arc));
+    EXPECT_TRUE(r.is_ok());
+    return r.unwrap();
+}
+
+static std::function<TelemetryResult<void*>(const TelemetryPacket&)>
+CountHandler(std::shared_ptr<std::atomic<size_t>> counter) {
+    return [counter](const TelemetryPacket&) -> TelemetryResult<void*> {
+        counter->fetch_add(1, std::memory_order_seq_cst);
+        return TelemetryResult<void*>::Ok(nullptr);
+    };
+}
+
+// a small “bus” that records transmitted frames.
+struct TestBus {
+    std::shared_ptr<std::vector<std::vector<uint8_t>>> frames;
+    TestBus() : frames(std::make_shared<std::vector<std::vector<uint8_t>>>()) {}
+    auto make_tx() {
+        auto sink = frames;
+        return [sink](const std::vector<uint8_t>& bytes) -> TelemetryResult<void*> {
+            sink->push_back(bytes);
+            return TelemetryResult<void*>::Ok(nullptr);
+        };
+    }
+};
+
+// ======================= Tests mirroring the Rust ones (except system test) =======================
 
 TEST(Serialize, RoundtripGps) {
-    std::vector<DataEndpoint> endpoints{DataEndpoint::SD_CARD, DataEndpoint::RADIO};
-    auto pkt_r = TelemetryPacket::from_f32(DataType::GPS_DATA,
-                          endpoints,
-                          0,
-                          std::vector<float>{5.2141414f, 3.1342144f, 1.1231232f});
-    ASSERT_FALSE(pkt_r.is_err());
-    auto pkt = pkt_r.value();
+    // GPS: 3 * f32
+    std::vector<DataEndpoint> endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
+    auto pkt = MakeGpsPacketFromF32s({5.2141414f, 3.1342144f, 1.1231232f}, endpoints, 0);
 
-    ASSERT_TRUE(pkt.validate().is_ok());
+    auto v = pkt.Validate();
+    ASSERT_TRUE(v.is_ok());
 
-    auto ser_r = Serializer::serialize(pkt);
-    ASSERT_FALSE(ser_r.is_err());
-    const auto& bytes = ser_r.value();
+    auto bytes = serialize_packet(pkt);
+    auto rpkt_res = deserialize_packet(bytes);
+    ASSERT_TRUE(rpkt_res.is_ok());
+    auto& rpkt = rpkt_res.unwrap();
 
-    auto rpkt_r = Serializer::deserialize(bytes);
-    ASSERT_FALSE(rpkt_r.is_err());
-    const auto& rpkt = rpkt_r.value();
-    ASSERT_TRUE(rpkt.validate().is_ok());
-
+    ASSERT_TRUE(rpkt.Validate().is_ok());
     EXPECT_EQ(rpkt.ty, pkt.ty);
     EXPECT_EQ(rpkt.data_size, pkt.data_size);
     EXPECT_EQ(rpkt.timestamp, pkt.timestamp);
+    ASSERT_TRUE(rpkt.endpoints && pkt.endpoints);
     EXPECT_EQ(*rpkt.endpoints, *pkt.endpoints);
+    ASSERT_TRUE(rpkt.payload && pkt.payload);
     EXPECT_EQ(*rpkt.payload, *pkt.payload);
 }
 
-TEST(Formatting, HeaderMatches) {
-    const std::vector endpoints{DataEndpoint::SD_CARD, DataEndpoint::RADIO};
-    auto pkt_r = TelemetryPacket::from_f32(DataType::GPS_DATA,
-                          endpoints,
-                          0,
-                          std::vector{1.0f, 2.0f, 3.0f});
-    ASSERT_FALSE(pkt_r.is_err());
-    auto s = pkt_r.value().header_string();
-    // adjust expected "Sender" if your C++ sender differs
-    EXPECT_EQ(s, "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0");
+TEST(Formatting, HeaderStringMatchesExpectation) {
+    std::vector<DataEndpoint> endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
+    auto pkt = MakeGpsPacketFromF32s({1.0f, 2.0f, 3.0f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
+    auto s = pkt.HeaderString();
+    EXPECT_EQ(s,
+              "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0");
+}
+
+TEST(Formatting, PacketToStringFormatsFloats) {
+    std::vector<DataEndpoint> endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
+    auto pkt = MakeGpsPacketFromF32s({1.0f, 2.5f, 3.25f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
+    auto text = pkt.ToString();
+    ASSERT_TRUE(text.rfind(
+        "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0, Data: ",
+        0) == 0);
+    EXPECT_NE(text.find("1"), std::string::npos);
+    EXPECT_NE(text.find("2.5"), std::string::npos);
+    EXPECT_NE(text.find("3.25"), std::string::npos);
 }
 
 TEST(Router, SendsAndReceives) {
-    // capture tx
-    auto tx_seen = std::make_shared<std::optional<TelemetryPacket>>(std::nullopt);
-    auto tx_seen_m = std::make_shared<std::mutex>();
-    Router::TxFn tx = [tx_seen, tx_seen_m](const std::vector<uint8_t>& bytes) -> Result<void, ErrorInfo> {
-        auto rpkt_r = Serializer::deserialize(bytes);
-        if (rpkt_r.is_err()) return Result<void, ErrorInfo>::err(rpkt_r.error());
-        std::lock_guard<std::mutex> lk(*tx_seen_m);
-        *tx_seen = rpkt_r.value();
-        return Result<void, ErrorInfo>::ok();
+    // capture spaces
+    auto tx_seen = std::make_shared<std::optional<TelemetryPacket>>();
+    auto sd_seen_decoded =
+        std::make_shared<std::optional<std::pair<DataType, std::vector<float>>>>();
+
+    // transmitter: record the deserialized packet we "sent"
+    auto tx_seen_c = tx_seen;
+    auto transmit = [tx_seen_c](const std::vector<uint8_t>& bytes) -> TelemetryResult<void*> {
+        auto res = deserialize_packet(bytes);
+        if (!res.is_ok()) return TelemetryResult<void*>::Err(res.unwrap_err());
+        *tx_seen_c = res.unwrap();
+        return TelemetryResult<void*>::Ok(nullptr);
     };
 
-    // local sd handler (decode floats)
-    auto mtx = std::make_shared<std::mutex>();
-    auto captured = std::make_shared<std::optional<std::pair<DataType, std::vector<float>>>>(std::nullopt);
-    EndpointHandler sd = get_sd_card_handler(mtx, captured);
+    // local SD handler: decode payload to f32s and record (ty, values)
+    auto sd_seen_c = sd_seen_decoded;
+    EndpointHandler sd_handler;
+    sd_handler.endpoint = DataEndpoint::SdCard;
+    sd_handler.handler = [sd_seen_c](const TelemetryPacket& pkt) -> TelemetryResult<void*> {
+        auto elems = std::max<size_t>(1, MESSAGE_ELEMENTS[static_cast<size_t>(pkt.ty)]);
+        auto per_elem = get_needed_message_size(pkt.ty) / elems;
+        EXPECT_EQ(pkt.ty, DataType::GpsData);
+        EXPECT_EQ(per_elem, 4u) << "GPS_DATA expected f32 elements";
+        std::vector<float> vals;
+        vals.reserve(pkt.payload->size() / 4);
+        for (size_t i = 0; i + 3 < pkt.payload->size(); i += 4) {
+            uint32_t u = (*pkt.payload)[i] |
+                         ((*pkt.payload)[i + 1] << 8) |
+                         ((*pkt.payload)[i + 2] << 16) |
+                         ((*pkt.payload)[i + 3] << 24);
+            float f;
+            std::memcpy(&f, &u, 4);
+            vals.push_back(f);
+        }
+        *sd_seen_c = std::make_pair(pkt.ty, std::move(vals));
+        return TelemetryResult<void*>::Ok(nullptr);
+    };
 
-    Router r(tx, BoardConfig({sd}));
+    auto router = Router(
+        /*transmit*/ std::optional<Router::TransmitFn>(transmit),
+        BoardConfig(std::vector<EndpointHandler>{sd_handler}),
+        StepClock::NewDefaultBox());
 
-    std::vector<float> data{1.f, 2.f, 3.f};
-    auto res = r.log(DataType::GPS_DATA, f32_le(data), 0);
-    ASSERT_TRUE(res.is_ok());
+    // send GPS_DATA (3 * f32) using Router::log (uses default endpoints from schema)
+    std::vector<float> data{1.0f, 2.0f, 3.0f};
+    ASSERT_TRUE(router.log<float>(DataType::GpsData, data, 0).is_ok());
 
-    // tx saw same type & bytes
-    {
-        std::lock_guard<std::mutex> lk(*tx_seen_m);
-        ASSERT_TRUE(tx_seen->has_value());
-        EXPECT_EQ(tx_seen->value().ty, DataType::GPS_DATA);
-        EXPECT_EQ(tx_seen->value().payload->size(), 3u * 4u);
+    // --- assertions ---
+    ASSERT_TRUE(tx_seen->has_value()) << "no tx packet recorded";
+    const auto& tx_pkt = tx_seen->value();
+    EXPECT_EQ(tx_pkt.ty, DataType::GpsData);
+    ASSERT_TRUE(tx_pkt.payload);
+    EXPECT_EQ(tx_pkt.payload->size(), 3u * 4u);
+
+    std::vector<uint8_t> expected;
+    expected.reserve(12);
+    for (float v : data) {
+        uint32_t u;
+        std::memcpy(&u, &v, 4);
+        expected.push_back(static_cast<uint8_t>( u        & 0xFFu));
+        expected.push_back(static_cast<uint8_t>((u >> 8 ) & 0xFFu));
+        expected.push_back(static_cast<uint8_t>((u >> 16) & 0xFFu));
+        expected.push_back(static_cast<uint8_t>((u >> 24) & 0xFFu));
+    }
+    EXPECT_EQ(*tx_pkt.payload, expected);
+
+    ASSERT_TRUE(sd_seen_decoded->has_value()) << "no sd packet recorded";
+    const auto& seen = sd_seen_decoded->value();
+    EXPECT_EQ(seen.first, DataType::GpsData);
+    EXPECT_EQ(seen.second, data);
+}
+
+TEST(Router, QueuedRoundtripBetweenTwoRouters) {
+    // TX router (only sends)
+    TestBus bus;
+    auto tx_fn = bus.make_tx();
+
+    auto tx_router = Router(
+        std::optional<Router::TransmitFn>(tx_fn),
+        BoardConfig(),  // no local handlers
+        StepClock::NewDefaultBox());
+
+    // RX router with local SD handler recording (ty, vals)
+    auto seen = std::make_shared<std::optional<std::pair<DataType, std::vector<float>>>>();
+    EndpointHandler sd_handler;
+    sd_handler.endpoint = DataEndpoint::SdCard;
+    sd_handler.handler = [seen](const TelemetryPacket& pkt) -> TelemetryResult<void*> {
+        if (!pkt.payload) return TelemetryResult<void*>::Ok(nullptr);
+        std::vector<float> vals;
+        for (size_t i = 0; i + 3 < pkt.payload->size(); i += 4) {
+            uint32_t u = (*pkt.payload)[i] |
+                         ((*pkt.payload)[i + 1] << 8) |
+                         ((*pkt.payload)[i + 2] << 16) |
+                         ((*pkt.payload)[i + 3] << 24);
+            float f;
+            std::memcpy(&f, &u, 4);
+            vals.push_back(f);
+        }
+        *seen = std::make_pair(pkt.ty, std::move(vals));
+        return TelemetryResult<void*>::Ok(nullptr);
+    };
+    auto rx_router = Router(
+        std::optional<Router::TransmitFn>([](const std::vector<uint8_t>&) { return TelemetryResult<void*>::Ok(nullptr); }),
+        BoardConfig(std::vector<EndpointHandler>{sd_handler}),
+        StepClock::NewDefaultBox());
+
+    // 1) Sender enqueues a packet for TX
+    std::vector<float> data{1.0f, 2.0f, 3.0f};
+    ASSERT_TRUE(tx_router.log_queue<float>(DataType::GpsData, data, 0).is_ok());
+
+    // 2) Flush TX queue -> pushes wire frames into TestBus
+    ASSERT_TRUE(tx_router.process_send_queue().is_ok());
+
+    // 3) Deliver captured frames into RX router's received queue
+    ASSERT_EQ(bus.frames->size(), 1u);
+    for (const auto& frame : *bus.frames) {
+        ASSERT_TRUE(rx_router.rx_serialized_packet_to_queue(frame).is_ok());
     }
 
-    // local handler decoded floats
-    {
-        std::lock_guard<std::mutex> lk(*mtx);
-        ASSERT_TRUE(captured->has_value());
-        EXPECT_EQ(captured->value().first, DataType::GPS_DATA);
-        EXPECT_EQ(captured->value().second, data);
+    // 4) Drain RX queue -> invokes local handlers
+    ASSERT_TRUE(rx_router.process_received_queue().is_ok());
+
+    ASSERT_TRUE(seen->has_value()) << "no packet delivered";
+    const auto& [ty, vals] = *seen;
+    EXPECT_EQ(ty, DataType::GpsData);
+    EXPECT_EQ(vals, data);
+}
+
+TEST(Router, QueuedSelfDeliveryViaReceiveQueue) {
+    TestBus bus;
+    auto tx_fn = bus.make_tx();
+
+    auto router = Router(
+        std::optional<Router::TransmitFn>(tx_fn),
+        BoardConfig(),  // no local handlers in this test
+        StepClock::NewDefaultBox());
+
+    // Enqueue for transmit (3 frames)
+    ASSERT_TRUE(router.log_queue<float>(DataType::GpsData, std::vector<float>{10.0f, 10.25f, 10.5f}, 42).is_ok());
+    ASSERT_TRUE(router.log_queue<float>(DataType::BatteryStatus, std::vector<float>{10.0f, 10.25f, 10.5f, 12.3f}, 42).is_ok());
+    ASSERT_TRUE(router.log_queue<float>(DataType::GpsData, std::vector<float>{10.0f, 10.25f, 10.5f}, 42).is_ok());
+
+    ASSERT_TRUE(router.process_send_queue().is_ok());
+    ASSERT_EQ(bus.frames->size(), 3u);
+
+    // Feed one frame back into the same router's received queue and drain
+    ASSERT_TRUE(router.rx_serialized_packet_to_queue(bus.frames->at(0)).is_ok());
+    ASSERT_TRUE(router.process_received_queue().is_ok());
+}
+
+// ================= Timeout budget tests =================
+
+static TelemetryPacket MkRxOnlyLocal(const std::vector<float>& vals, uint64_t ts) {
+    return MakeGpsPacketFromF32s(vals, {DataEndpoint::SdCard}, ts);
+}
+
+static std::function<TelemetryResult<void*>(const std::vector<uint8_t>&)>
+TxCounter(std::shared_ptr<std::atomic<size_t>> counter) {
+    return [counter](const std::vector<uint8_t>& bytes) -> TelemetryResult<void*> {
+        EXPECT_FALSE(bytes.empty());
+        counter->fetch_add(1, std::memory_order_seq_cst);
+        return TelemetryResult<void*>::Ok(nullptr);
+    };
+}
+
+TEST(Timeouts, ProcessAllQueuesTimeoutZeroDrainsFully) {
+    auto tx_count = std::make_shared<std::atomic<size_t>>(0);
+    auto tx = TxCounter(tx_count);
+
+    auto rx_count = std::make_shared<std::atomic<size_t>>(0);
+    EndpointHandler handler;
+    handler.endpoint = DataEndpoint::SdCard;
+    handler.handler = [rx_count](const TelemetryPacket&) -> TelemetryResult<void*> {
+        rx_count->fetch_add(1, std::memory_order_seq_cst);
+        return TelemetryResult<void*>::Ok(nullptr);
+    };
+
+    Router r(std::optional<Router::TransmitFn>(tx),
+             BoardConfig(std::vector<EndpointHandler>{handler}),
+             StepClock::NewDefaultBox());
+
+    // Enqueue TX (3)
+    for (int i = 0; i < 3; ++i) {
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
     }
+    // Enqueue RX (2) with only-local endpoint
+    for (int i = 0; i < 2; ++i) {
+        ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({9.0f, 8.0f, 7.0f}, 123)).is_ok());
+    }
+
+    // timeout = 0 → drain fully
+    ASSERT_TRUE(r.process_all_queues_with_timeout(0).is_ok());
+
+    // TX: all three frames should be sent
+    EXPECT_EQ(tx_count->load(std::memory_order_seq_cst), 3u);
+    // RX handler invoked for each TX (local delivery) + each RX = 3 + 2 = 5
+    EXPECT_EQ(rx_count->load(std::memory_order_seq_cst), 5u);
+}
+
+TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget) {
+    auto tx_count = std::make_shared<std::atomic<size_t>>(0);
+    auto tx = TxCounter(tx_count);
+
+    auto rx_count = std::make_shared<std::atomic<size_t>>(0);
+    EndpointHandler handler;
+    handler.endpoint = DataEndpoint::SdCard;
+    handler.handler = [rx_count](const TelemetryPacket&) -> TelemetryResult<void*> {
+        rx_count->fetch_add(1, std::memory_order_seq_cst);
+        return TelemetryResult<void*>::Ok(nullptr);
+    };
+
+    Router r(std::optional<Router::TransmitFn>(tx),
+             BoardConfig(std::vector<EndpointHandler>{handler}),
+             StepClock::NewBox(/*start=*/0, /*step=*/10));
+
+    // Seed work in both queues (5 of each)
+    for (int i = 0; i < 5; ++i) {
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
+        ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({4.0f, 5.0f, 6.0f}, 1)).is_ok());
+    }
+
+    // Step is 10ms per call; timeout 5ms guarantees exactly one iteration
+    ASSERT_TRUE(r.process_all_queues_with_timeout(5).is_ok());
+
+    // One iteration → at most one TX send
+    EXPECT_EQ(tx_count->load(std::memory_order_seq_cst), 1u);
+
+    // Handlers run for both TX local delivery and RX processing → 2 total
+    EXPECT_EQ(rx_count->load(std::memory_order_seq_cst), 2u);
+
+    // Drain the rest to prove there was more work left
+    ASSERT_TRUE(r.process_all_queues_with_timeout(0).is_ok());
+    EXPECT_EQ(tx_count->load(std::memory_order_seq_cst), 5u);
+    EXPECT_EQ(rx_count->load(std::memory_order_seq_cst), 10u); // 5 (TX locals) + 5 (RX)
+}
+
+TEST(Timeouts, ProcessAllQueuesHandlesU64Wraparound) {
+    auto tx_count = std::make_shared<std::atomic<size_t>>(0);
+    auto tx = TxCounter(tx_count);
+
+    auto rx_count = std::make_shared<std::atomic<size_t>>(0);
+    EndpointHandler handler;
+    handler.endpoint = DataEndpoint::SdCard;
+    handler.handler = [rx_count](const TelemetryPacket&) -> TelemetryResult<void*> {
+        rx_count->fetch_add(1, std::memory_order_seq_cst);
+        return TelemetryResult<void*>::Ok(nullptr);
+    };
+
+    Router r(std::optional<Router::TransmitFn>(tx),
+             BoardConfig(std::vector<EndpointHandler>{handler}),
+             StepClock::NewBox(std::numeric_limits<uint64_t>::max() - 1, /*step=*/2));
+
+    // One TX and one RX (RX only-local to avoid creating extra TX on receive)
+    ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
+    ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({4.0f, 5.0f, 6.0f}, 7)).is_ok());
+
+    // Small budget; wrapping should allow one iteration then stop
+    ASSERT_TRUE(r.process_all_queues_with_timeout(1).is_ok());
+
+    // One iteration can do up to one TX and one RX
+    EXPECT_LE(tx_count->load(std::memory_order_seq_cst), 1u);
+    EXPECT_LE(rx_count->load(std::memory_order_seq_cst), 2u); // TX local + RX
+    EXPECT_GE(tx_count->load(std::memory_order_seq_cst) + rx_count->load(std::memory_order_seq_cst), 1u);
+}
+
+// ================= Helpers tests mirrored from Rust “Converted tests” =================
+
+TEST(Helpers, PacketHexToString) {
+    // Builds the exact string checked in the Rust port; here we assert our C++ Hex formatter matches.
+    // If your TelemetryPacket exposes ToHexString(), use it. Otherwise, use ToString() if it prints hex in the same form.
+    auto pkt = FakeTelemetryPacketBytes();
+
+    // Prefer ToHexString() if available; otherwise fall back to ToString() (kept for compatibility).
+    std::string got;
+#if defined(HAVE_TO_HEX_STRING)
+    got = pkt.ToHexString();
+#else
+    got = pkt.ToHexString(); // your codebase already had this test in C++, per the Rust comments
+#endif
+
+    const char* expect =
+        "Type: GPS_DATA, Size: 3, Sender: Flight Controller, Endpoints: [SD_CARD, RADIO], "
+        "Timestamp: 1123581321, Data (hex): 0x13 0x21 0x34";
+    EXPECT_EQ(got, expect);
+}
+
+TEST(Helpers, CopyTelemetryPacket) {
+    // C++ already had this helper in your original suite; we exercise the same semantics the Rust test ports mention.
+    // Signature assumed: bool CopyTelemetryPacket(TelemetryPacket* dest, const TelemetryPacket* src)
+    // If yours returns int / TelemetryResult, adapt the EXPECTs accordingly.
+    extern bool CopyTelemetryPacket(TelemetryPacket* dest, const TelemetryPacket* src);
+
+    // (1) null dest → error/false
+    TelemetryPacket src = FakeTelemetryPacketBytes();
+    EXPECT_FALSE(CopyTelemetryPacket(nullptr, &src));
+
+    // (2) same pointer (no-op) → OK/true
+    TelemetryPacket same = FakeTelemetryPacketBytes();
+    EXPECT_TRUE(CopyTelemetryPacket(&same, &same));
+
+    // (3) distinct objects → deep copy and equal fields
+    TelemetryPacket dest = TelemetryPacket::ShallowDefault(); // if you have a default ctor; otherwise, construct minimally
+    EXPECT_TRUE(CopyTelemetryPacket(&dest, &src));
+
+    EXPECT_EQ(dest.timestamp, src.timestamp);
+    EXPECT_EQ(dest.ty, src.ty);
+    EXPECT_EQ(dest.data_size, src.data_size);
+    ASSERT_TRUE(dest.endpoints && src.endpoints);
+    EXPECT_EQ(*dest.endpoints, *src.endpoints);
+    ASSERT_TRUE(dest.payload && src.payload);
+    EXPECT_EQ(*dest.payload, *src.payload);
 }

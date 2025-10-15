@@ -1,249 +1,370 @@
 #include "router.hpp"
+#include <cstdio>
+#include <cstring>
 #include "serialize.hpp"
-#include "config.hpp"
-#include <cstring>   // for memcpy
-
-#include <algorithm> // std::find
+extern "C" int swprintf(wchar_t *s, size_t n, const wchar_t *fmt, ...);
+// Create a TU-level undefined reference without any runtime cost.
+static void* const s_force_link_swprintf = (void*)&swprintf;
 
 namespace seds
 {
-    // ---- internal helpers (cpp-only) ----
-
-    // Pick default endpoints from your schema entry for this DataType.
-    static inline const std::vector<DataEndpoint>& default_endpoints_for(DataType ty)
+    // Simple stdout fallback (works under std; no-op alternative could be added)
+    static inline void fallback_stdout(const std::string & msg)
     {
-        // Assumes your MESSAGE_ELEMENTS table’s entry stores a std::vector<DataEndpoint> named `endpoints`.
-        // This matches your earlier change to MessageMeta.
-        return MESSAGE_ELEMENTS[static_cast<int>(ty)].endpoints;
+        std::printf("%s\n", msg.c_str());
     }
 
-    // ---- ctor ----
-    Router::Router(TxFn tx, BoardConfig cfg)
-        : transmit_(std::move(tx)), config_(std::move(cfg))
-    {
-    }
+    // -------------------- Router impl --------------------
 
-    // ---- float logging → pack to bytes, reuse byte path ----
-    Result<void, ErrorInfo>
-    Router::log(const DataType ty, const std::vector<float> & values, const uint64_t ts) const noexcept
+    TelemetryResult<void *> Router::process_send_queue()
     {
-        std::vector<uint8_t> bytes(values.size() * sizeof(float));
-        if (!values.empty())
+        while (!transmit_queue_.empty())
         {
-            std::memcpy(bytes.data(), values.data(), bytes.size());
+            TelemetryPacket pkt = std::move(transmit_queue_.back());
+            transmit_queue_.pop_back();
+            auto r = send(pkt);
+            if (r.is_err()) return r;
         }
-        return log(ty, bytes, ts);
+        return TelemetryResult<void *>::Ok(nullptr);
     }
 
-    Result<void, ErrorInfo>
-    Router::log_queue(const DataType ty, const std::vector<float> & values, const uint64_t ts) noexcept
+    TelemetryResult<void *> Router::process_all_queues()
     {
-        std::vector<uint8_t> bytes(values.size() * sizeof(float));
-        if (!values.empty())
-        {
-            std::memcpy(bytes.data(), values.data(), bytes.size());
-        }
-        return log_queue(ty, bytes, ts);
-    }
-
-    // ---- bytes logging ----
-    Result<void, ErrorInfo>
-    Router::log(DataType ty, const std::vector<uint8_t> & data, const uint64_t ts) const noexcept
-    {
-        const auto & eps = default_endpoints_for(ty);
-
-        // Build the packet
-        const TelemetryPacket pkt(ty, eps, DEVICE_IDENTIFIER, ts, data);
-
-        // Serialize
-        auto bytes = Serializer::serialize(pkt);
-        if (bytes.is_err())
-            return Result<void, ErrorInfo>::err(bytes.error());
-
-        // Transmit if callback exists
-        if (transmit_)
-        {
-            auto tx_r = transmit_(bytes.value());
-            if (tx_r.is_err())
-                return Result<void, ErrorInfo>::err(tx_r.error());
-        }
-
-        // Also deliver locally to any handler whose endpoint appears in the packet
-        for (const auto & eh : config_.handlers)
-        {
-            if (std::find(eps.begin(), eps.end(), eh.endpoint) != eps.end())
-            {
-                if (auto r = eh.handler(pkt); r.is_err())
-                    return Result<void, ErrorInfo>::err(r.error());
-            }
-        }
-
-        return Result<void, ErrorInfo>::ok();
-    }
-
-    Result<void, ErrorInfo>
-    Router::log_queue(const DataType ty, const std::vector<uint8_t> & data, const uint64_t ts) noexcept
-    {
-        // If the board has explicit local_endpoints configured, prefer those;
-        // otherwise fall back to the schema defaults so the queued packet
-        // looks like an immediate log() packet.
-        const auto& eps = !config_.local_endpoints.empty()
-                        ? config_.local_endpoints
-                        : default_endpoints_for(ty);
-
-        const TelemetryPacket pkt(ty, eps, DEVICE_IDENTIFIER, ts, data);
-        return queue_tx_message(pkt);
-    }
-
-    // ---- queue helpers ----
-    Result<void, ErrorInfo>
-    Router::queue_tx_message(const TelemetryPacket & pkt) noexcept
-    {
-        send_queue.push(pkt);
-        return Result<void, ErrorInfo>::ok();
-    }
-
-    // ---- RX path (direct) ----
-    Result<void, ErrorInfo>
-    Router::receive(const TelemetryPacket & pkt) const noexcept
-    {
-        // Deliver to any matching handler (endpoint present in pkt.endpoints)
-        for (const auto & eh : config_.handlers)
-        {
-            const auto & eps = *pkt.endpoints;
-            if (std::find(eps.begin(), eps.end(), eh.endpoint) != eps.end())
-            {
-                auto r = eh.handler(pkt);
-                if (r.is_err())
-                    return Result<void, ErrorInfo>::err(r.error());
-            }
-        }
-        return Result<void, ErrorInfo>::ok();
-    }
-
-    Result<void, ErrorInfo>
-    Router::receive_serialized(const std::vector<uint8_t> & bytes) const noexcept
-    {
-        auto pkt_r = TelemetryPacket::deserialize(bytes);
-        if (pkt_r.is_err())
-            return Result<void, ErrorInfo>::err(pkt_r.error());
-        return receive(pkt_r.value());
-    }
-
-    // ---- RX path (queue) ----
-    Result<void, ErrorInfo>
-    Router::rx_serialized_packet_to_queue(const std::vector<uint8_t> & bytes) noexcept
-    {
-        auto pkt_r = TelemetryPacket::deserialize(bytes);
-        if (pkt_r.is_err())
-            return Result<void, ErrorInfo>::err(pkt_r.error());
-        received_queue.push(pkt_r.value());
-        return Result<void, ErrorInfo>::ok();
-    }
-
-    Result<void, ErrorInfo>
-    Router::rx_packet_to_queue(const TelemetryPacket & pkt) noexcept
-    {
-        received_queue.push(pkt);
-        return Result<void, ErrorInfo>::ok();
-    }
-
-    // ---- pump queues ----
-    Result<void, ErrorInfo>
-    Router::process_send_queue() noexcept
-    {
-        while (!send_queue.empty())
-        {
-            const auto & pkt = send_queue.front();
-            auto ser_r = Serializer::serialize(pkt);
-            if (ser_r.is_err())
-                return Result<void, ErrorInfo>::err(ser_r.error());
-
-            if (transmit_)
-            {
-                auto tx_result = transmit_(ser_r.value());
-                if (tx_result.is_err())
-                    return Result<void, ErrorInfo>::err(tx_result.error());
-            }
-
-            send_queue.pop();
-        }
-        return Result<void, ErrorInfo>::ok();
-    }
-
-    Result<void, ErrorInfo>
-    Router::process_received_queue() noexcept
-    {
-        while (!received_queue.empty())
-        {
-            const auto & pkt = received_queue.front();
-            auto r = receive(pkt);
-            if (r.is_err())
-                return Result<void, ErrorInfo>::err(r.error());
-            received_queue.pop();
-        }
-        return Result<void, ErrorInfo>::ok();
-    }
-
-    Result<void, ErrorInfo>
-    Router::process_all_queues() noexcept
-    {
-        auto a = process_send_queue();
-        if (a.is_err())
-            return Result<void, ErrorInfo>::err(a.error());
+        auto r1 = process_send_queue();
+        if (r1.is_err()) return r1;
         return process_received_queue();
     }
 
-    // ---- time-bound pumps ----
-    Result<void, ErrorInfo>
-    Router::process_tx_queue_with_timeout(const Clock * clock, uint32_t timeout_ms) noexcept
+    void Router::clear_queues()
     {
-        if (!clock)
-            return Result<void, ErrorInfo>::err(ErrorInfo(TelemetryError::BadArg, "null clock"));
-
-        const uint64_t end = clock->now_ms() + timeout_ms;
-        while (clock->now_ms() < end)
-        {
-            if (send_queue.empty()) break;
-            auto r = process_send_queue();
-            if (r.is_err())
-                return Result<void, ErrorInfo>::err(r.error());
-        }
-        return Result<void, ErrorInfo>::ok();
+        transmit_queue_.clear();
+        received_queue_.clear();
     }
 
-    Result<void, ErrorInfo>
-    Router::process_rx_queue_with_timeout(const Clock * clock, uint32_t timeout_ms) noexcept
-    {
-        if (!clock)
-            return Result<void, ErrorInfo>::err(ErrorInfo(TelemetryError::BadArg, "null clock"));
+    void Router::clear_rx_queue() { received_queue_.clear(); }
+    void Router::clear_tx_queue() { transmit_queue_.clear(); }
 
-        const uint64_t end = clock->now_ms() + timeout_ms;
-        while (clock->now_ms() < end)
+    TelemetryResult<void *> Router::process_tx_queue_with_timeout(std::uint32_t timeout_ms)
+    {
+        const std::uint64_t start = clock_->now_ms();
+        while (!transmit_queue_.empty())
         {
-            if (received_queue.empty()) break;
-            auto r = process_received_queue();
-            if (r.is_err())
-                return Result<void, ErrorInfo>::err(r.error());
+            TelemetryPacket pkt = std::move(transmit_queue_.back());
+            transmit_queue_.pop_back();
+            auto r = send(pkt);
+            if (r.is_err()) return r;
+            if (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)) break;
         }
-        return Result<void, ErrorInfo>::ok();
+        return TelemetryResult<void *>::Ok(nullptr);
     }
 
-    Result<void, ErrorInfo>
-    Router::process_all_queues_with_timeout(const Clock * clock, uint32_t timeout_ms) noexcept
+    TelemetryResult<void *> Router::handle_rx_queue_item(RxQueueItem item)
     {
-        if (!clock)
-            return Result<void, ErrorInfo>::err(ErrorInfo(TelemetryError::BadArg, "null clock"));
-
-        const uint64_t end = clock->now_ms() + timeout_ms;
-        while (clock->now_ms() < end)
+        if (std::holds_alternative<TelemetryPacket>(item))
         {
-            auto r = process_all_queues();
-            if (r.is_err())
-                return Result<void, ErrorInfo>::err(r.error());
-            if (send_queue.empty() && received_queue.empty()) break;
+            return receive(std::get<TelemetryPacket>(item));
         }
-        return Result<void, ErrorInfo>::ok();
+        else
+        {
+            return receive_serialized(std::get<std::vector<std::uint8_t> >(item));
+        }
+    }
+
+    TelemetryResult<void *> Router::process_rx_queue_with_timeout(std::uint32_t timeout_ms)
+    {
+        const std::uint64_t start = clock_->now_ms();
+        while (!received_queue_.empty())
+        {
+            RxQueueItem it = std::move(received_queue_.back());
+            received_queue_.pop_back();
+            auto r = handle_rx_queue_item(std::move(it));
+            if (r.is_err()) return r;
+            if (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)) break;
+        }
+        return TelemetryResult<void *>::Ok(nullptr);
+    }
+
+    TelemetryResult<void *> Router::process_all_queues_with_timeout(std::uint32_t timeout_ms)
+    {
+        const bool drain_fully = (timeout_ms == 0);
+        const std::uint64_t start = drain_fully ? 0 : clock_->now_ms();
+
+        for (;;)
+        {
+            bool did_any = false;
+
+            if (!transmit_queue_.empty())
+            {
+                TelemetryPacket pkt = std::move(transmit_queue_.back());
+                transmit_queue_.pop_back();
+                auto r = send(pkt);
+                if (r.is_err()) return r;
+                did_any = true;
+            }
+
+            if (!received_queue_.empty())
+            {
+                RxQueueItem it = std::move(received_queue_.back());
+                received_queue_.pop_back();
+                auto r = handle_rx_queue_item(std::move(it));
+                if (r.is_err()) return r;
+                did_any = true;
+            }
+
+            if (!did_any) break;
+            if (!drain_fully && (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)))
+            {
+                break;
+            }
+        }
+
+        return TelemetryResult<void *>::Ok(nullptr);
+    }
+
+    TelemetryResult<void *> Router::queue_tx_message(TelemetryPacket pkt)
+    {
+        auto v = pkt.Validate();
+        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        transmit_queue_.push_back(std::move(pkt));
+        return TelemetryResult<void *>::Ok(nullptr);
+    }
+
+    TelemetryResult<void *> Router::process_received_queue()
+    {
+        while (!received_queue_.empty())
+        {
+            RxQueueItem it = std::move(received_queue_.back());
+            received_queue_.pop_back();
+            auto r = handle_rx_queue_item(std::move(it));
+            if (r.is_err()) return r;
+        }
+        return TelemetryResult<void *>::Ok(nullptr);
+    }
+
+    TelemetryResult<void *> Router::rx_serialized_packet_to_queue(const std::vector<std::uint8_t> & bytes)
+    {
+        received_queue_.emplace_back(bytes);
+        return TelemetryResult<void *>::Ok(nullptr);
+    }
+
+    TelemetryResult<void *> Router::rx_packet_to_queue(TelemetryPacket pkt)
+    {
+        auto v = pkt.Validate();
+        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        received_queue_.emplace_back(std::move(pkt));
+        return TelemetryResult<void *>::Ok(nullptr);
+    }
+
+    TelemetryResult<void *> Router::handle_callback_error(const TelemetryPacket & pkt,
+                                                          std::optional<DataEndpoint> dest,
+                                                          const TelemetryError & e)
+    {
+        // Compose message once
+        std::string error_msg;
+        if (dest.has_value())
+        {
+            // local handler failed
+            error_msg = "Handler for endpoint ";
+            error_msg += data_endpoint_as_str(*dest);
+            error_msg += " failed on device ";
+            error_msg += DEVICE_IDENTIFIER;
+            error_msg += ": ";
+            error_msg += (e.msg ? e.msg : "error");
+        }
+        else
+        {
+            // TX failed
+            error_msg = "TX Handler failed on device ";
+            error_msg += DEVICE_IDENTIFIER;
+            error_msg += ": ";
+            error_msg += (e.msg ? e.msg : "error");
+        }
+
+        // Gather local endpoints referenced by this packet
+        std::vector<DataEndpoint> locals;
+        if (pkt.endpoints)
+        {
+            for (auto ep: *pkt.endpoints)
+            {
+                if (cfg_.is_local_endpoint(ep)) locals.push_back(ep);
+            }
+        }
+        std::sort(locals.begin(), locals.end());
+        locals.erase(std::unique(locals.begin(), locals.end()), locals.end());
+
+        // If a local handler failed, exclude just that one
+        if (dest.has_value())
+        {
+            locals.erase(std::remove(locals.begin(), locals.end(), *dest), locals.end());
+        }
+
+        if (!dest.has_value())
+        {
+            // TX failure
+            if (locals.empty())
+            {
+                fallback_stdout(error_msg);
+                return TelemetryResult<void *>::Ok(nullptr);
+            }
+            // else: broadcast to all locals
+        }
+        else
+        {
+            // local handler failure
+            if (locals.empty())
+            {
+                // nothing else local to notify
+                return TelemetryResult<void *>::Ok(nullptr);
+            }
+        }
+
+        // Build zero-padded payload to TelemetryError schema
+        const auto & meta = message_meta(DataType::TelemetryError);
+        std::vector<std::uint8_t> buf(meta.data_size, 0);
+        const auto * msg_bytes = reinterpret_cast<const std::uint8_t *>(error_msg.data());
+        const std::size_t copy_n = std::min(buf.size(), error_msg.size());
+        if (copy_n > 0) std::memcpy(buf.data(), msg_bytes, copy_n);
+
+        // Target only the chosen local endpoints
+        auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(buf));
+        TelemetryResult<TelemetryPacket> pkt_res =
+                TelemetryPacket::New(DataType::TelemetryError,
+                                     locals,
+                                     DEVICE_IDENTIFIER,
+                                     clock_->now_ms(),
+                                     std::move(payload_arc));
+        if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
+
+        // Normal path: since endpoints are local, send() will deliver via local handlers only.
+        return send(pkt_res.unwrap());
+    }
+
+    TelemetryResult<void *> Router::send(const TelemetryPacket & pkt)
+    {
+        auto v = pkt.Validate();
+        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+
+        // Decide whether to transmit remotely (any endpoint that is NOT local)
+        bool send_remote = false;
+        if (pkt.endpoints)
+        {
+            for (auto ep: *pkt.endpoints)
+            {
+                if (!cfg_.is_local_endpoint(ep))
+                {
+                    send_remote = true;
+                    break;
+                }
+            }
+        }
+
+        // Serialize exactly once.
+        std::vector<std::uint8_t> bytes = serialize_packet(pkt);
+
+        if (send_remote && transmit_)
+        {
+            bool ok = false;
+            TelemetryError last_err = TelemetryError::BadArg();
+            for (std::size_t i = 0; i < MAX_NUMBER_OF_RETRYS; ++i)
+            {
+                auto r = transmit_(bytes);
+                if (r.is_ok())
+                {
+                    ok = true;
+                    break;
+                }
+                last_err = r.unwrap_err();
+            }
+            if (!ok)
+            {
+                auto h = handle_callback_error(pkt, std::nullopt, last_err);
+                if (h.is_err()) return h;
+                return TelemetryResult<void *>::Err(TelemetryError::HandlerError("TX failed"));
+            }
+        }
+
+        // Local dispatch to matching handlers
+        if (pkt.endpoints)
+        {
+            for (DataEndpoint dest: *pkt.endpoints)
+            {
+                for (const auto & h: cfg_.handlers)
+                {
+                    if (h.endpoint == dest)
+                    {
+                        bool ok = false;
+                        TelemetryError last_err = TelemetryError::BadArg();
+                        for (std::size_t i = 0; i < MAX_NUMBER_OF_RETRYS; ++i)
+                        {
+                            auto r = h.handler(pkt);
+                            if (r.is_ok())
+                            {
+                                ok = true;
+                                break;
+                            }
+                            last_err = r.unwrap_err();
+                        }
+                        if (!ok)
+                        {
+                            auto cb = handle_callback_error(pkt, dest, last_err);
+                            if (cb.is_err()) return cb;
+                            return TelemetryResult<void *>::Err(
+                                TelemetryError::HandlerError("local handler failed"));
+                        }
+                    }
+                }
+            }
+        }
+
+        return TelemetryResult<void *>::Ok(nullptr);
+    }
+
+    TelemetryResult<void *> Router::receive_serialized(const std::vector<std::uint8_t> & bytes)
+    {
+        auto pkt_res = deserialize_packet(bytes);
+        if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
+        auto pkt = pkt_res.unwrap();
+        auto v = pkt.Validate();
+        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+        return receive(pkt);
+    }
+
+    TelemetryResult<void *> Router::receive(const TelemetryPacket & pkt)
+    {
+        auto v = pkt.Validate();
+        if (v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
+
+        if (pkt.endpoints)
+        {
+            for (DataEndpoint dest: *pkt.endpoints)
+            {
+                for (const auto & h: cfg_.handlers)
+                {
+                    if (h.endpoint == dest)
+                    {
+                        bool ok = false;
+                        TelemetryError last_err = TelemetryError::BadArg();
+                        for (std::size_t i = 0; i < MAX_NUMBER_OF_RETRYS; ++i)
+                        {
+                            auto r = h.handler(pkt);
+                            if (r.is_ok())
+                            {
+                                ok = true;
+                                break;
+                            }
+                            last_err = r.unwrap_err();
+                        }
+                        if (!ok)
+                        {
+                            auto cb = handle_callback_error(pkt, dest, last_err);
+                            if (cb.is_err()) return cb;
+                        }
+                    }
+                }
+            }
+        }
+
+        return TelemetryResult<void *>::Ok(nullptr);
     }
 
 } // namespace seds

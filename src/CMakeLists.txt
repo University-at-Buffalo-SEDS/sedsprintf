@@ -1,5 +1,7 @@
 file(GLOB_RECURSE SEDS_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.c"     # <- ensure the C stub is picked up
+
 )
 
 add_library(sedsprintf STATIC ${SEDS_SOURCES})
@@ -30,3 +32,4 @@ install(EXPORT sedsprintfTargets
         NAMESPACE sedsprintf::
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sedsprintf
 )
+

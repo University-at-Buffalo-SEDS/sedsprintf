@@ -1,31 +1,24 @@
 #pragma once
+
 #include <cstdint>
 #include <type_traits>
 
-namespace seds {
+// The ReprU32Enum “trait” for enums represented as u32 in serialized form.
+template <typename E, typename Enable = void>
+struct ReprU32Enum; // no default; must be specialized by the macro below
 
-    // Trait to mark enums that can be represented as uint32_t
-    template<typename Enum>
-    struct ReprU32Enum {
-        static constexpr bool value =
-            std::is_enum<Enum>::value &&
-            sizeof(Enum) == sizeof(uint32_t);
-    };
-
-    template<typename Enum>
-    constexpr bool is_repr_u32_v = ReprU32Enum<Enum>::value;
-
-    // Helpers for conversion
-    template<typename Enum,
-             typename std::enable_if<is_repr_u32_v<Enum>, int>::type = 0>
-    constexpr uint32_t to_u32(Enum e) noexcept {
-        return static_cast<uint32_t>(e);
-    }
-
-    template<typename Enum,
-             typename std::enable_if<is_repr_u32_v<Enum>, int>::type = 0>
-    constexpr Enum from_u32(uint32_t v) noexcept {
-        return static_cast<Enum>(v);
-    }
-
-} // namespace seds
+// Helper macro to specialize ReprU32Enum for a concrete enum type E,
+// and enforce at compile-time that sizeof(E) == sizeof(uint32_t).
+//
+// Usage:
+//   enum class MyEnum : std::uint32_t { A = 0, B = 1 };
+//   SEDS_IMPL_REPR_U32_ENUM(MyEnum, /*max=*/1);
+//
+// After that, you can access: ReprU32Enum<MyEnum>::MAX
+#define SEDS_IMPL_REPR_U32_ENUM(E, MAXVAL)                                       \
+static_assert(sizeof(E) == sizeof(std::uint32_t),                             \
+"Enum " #E " must be 32-bit (repr(u32))");                      \
+template <>                                                                   \
+struct ReprU32Enum<E, void> {                                                \
+static constexpr std::uint32_t MAX = static_cast<std::uint32_t>(MAXVAL);  \
+}

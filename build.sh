@@ -35,7 +35,7 @@ fi
 
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
-  -DSEDSPRINTF_BUILD_TESTS="${BUILD_TESTS}" \
+  -DBUILD_TESTING="${BUILD_TESTS}" \
   "${temp_objs[@]}"
 
 

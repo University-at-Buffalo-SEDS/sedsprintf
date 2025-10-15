@@ -59,22 +59,19 @@ static TelemetryPacket MakeGpsPacketFromF32s(const std::vector<float>& vals,
     }
     auto payload_arc = std::make_shared<const std::vector<uint8_t>>(std::move(bytes));
     TelemetryResult<TelemetryPacket> r =
-        TelemetryPacket::New(DataType::GpsData, eps, sender, ts, std::move(payload_arc));
+        TelemetryPacket::New(DataType::GpsData, eps, sender, ts, payload_arc);
     EXPECT_TRUE(r.is_ok()) << "failed to build GPS packet";
     return r.unwrap();
 }
 
 // deterministic 3-byte payload helper used by hex/string tests
 static TelemetryPacket FakeTelemetryPacketBytes() {
-    std::vector<uint8_t> raw{0x13, 0x21, 0x34};
-    auto payload_arc = std::make_shared<const std::vector<uint8_t>>(std::move(raw));
-    std::vector<DataEndpoint> eps{DataEndpoint::SdCard, DataEndpoint::Radio};
+    const std::vector<float> data{0x13, 0x21, 0x34};
+    const std::vector eps{DataEndpoint::SdCard, DataEndpoint::Radio};
 
-    TelemetryResult<TelemetryPacket> r =
-        TelemetryPacket::New(DataType::GpsData, eps, "Flight Controller",
-                             /*ts=*/1123581321ull, std::move(payload_arc));
-    EXPECT_TRUE(r.is_ok());
-    return r.unwrap();
+    TelemetryPacket packet = MakeGpsPacketFromF32s(data, eps, /*ts=*/1123581321ull, "Flight Controller");
+    EXPECT_TRUE(packet.Validate().is_ok());
+    return packet;
 }
 
 static std::function<TelemetryResult<void*>(const TelemetryPacket&)>
@@ -427,8 +424,8 @@ TEST(Helpers, PacketHexToString) {
 #endif
 
     const char* expect =
-        "Type: GPS_DATA, Size: 3, Sender: Flight Controller, Endpoints: [SD_CARD, RADIO], "
-        "Timestamp: 1123581321, Data (hex): 0x13 0x21 0x34";
+        "Type: GPS_DATA, Size: 12, Sender: Flight Controller, Endpoints: [SD_CARD, RADIO], "
+        "Timestamp: 1123581321, Data (hex): 0x00 0x00 0x98 0x41 0x00 0x00 0x04 0x42 0x00 0x00 0x50 0x42";
     EXPECT_EQ(got, expect);
 }
 

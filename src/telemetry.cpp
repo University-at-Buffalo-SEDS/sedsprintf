@@ -271,16 +271,14 @@ namespace seds
         return s;
     }
 
-    std::string TelemetryPacket::ToHexString() const
-    {
+    std::string TelemetryPacket::ToHexString() const {
         std::string s = HeaderString();
+
         std::string hex;
-        if (payload)
-        {
+        if (payload && !payload->empty()) {
             hex.reserve(payload->size() * 5); // " 0x??"
-            for (std::uint8_t b: *payload)
-            {
-                char buf[6]; // space + 0x + 2hex + '\0'
+            for (uint8_t b : *payload) {
+                char buf[6]; // " 0x" + 2 hex + '\0'
                 std::snprintf(buf, sizeof(buf), " 0x%02x", static_cast<unsigned>(b));
                 hex += buf;
             }
@@ -289,6 +287,7 @@ namespace seds
         if (!hex.empty()) s += hex;
         return s;
     }
+
 
     // ostream support
     std::ostream & operator<<(std::ostream & os, const TelemetryPacket & pkt)

@@ -40,7 +40,7 @@ namespace seds
         }
 
         // error ctor
-        explicit Result(E e) : ok_(false), error_(std::move(e))
+        explicit Result(E e) : error_(std::move(e))
         {
         }
 

@@ -1,174 +1,220 @@
-#include "serialize.h"
+#include "serialize.hpp"
 #include <cstring>
-// ReSharper disable once CppUnusedIncludeDirective
-#include <cstdint>
-#include <memory>
-#include <vector>
-#include <type_traits>
 
-// Dear programmer:
-// When I wrote this code, only god and I knew how it worked.
-// Now, only god knows it!
-// Therefore, if you are trying to optimize
-// this routine, and it fails (it most surely will),
-// please increase this counter as a warning for the next person:
-// total hours_wasted_here = 24
-
-
-// ---- Fixed wire sizes (portable) ----
-static constexpr size_t kTypeSize = sizeof(uint32_t); // u32
-static constexpr size_t kDataSizeSize = sizeof(uint32_t); // u32
-static constexpr size_t kTimeSize = sizeof(uint64_t); // u64
-static constexpr size_t kNumEndpointsSize = sizeof(uint32_t); // u32
-static constexpr size_t kEndpointElemSize = sizeof(uint32_t); // each endpoint serialized as u32
-
-// Fixed portion of the header (everything except the variable-length endpoints array)
-size_t header_size_bytes()
+namespace seds
 {
-    return kTypeSize + kDataSizeSize + kTimeSize + kNumEndpointsSize;
-}
-
-// Full packet size on the wire: fixed header + endpoints[] + payload
-size_t get_packet_size(const telemetry_packet_t & packet)
-{
-    const size_t fixed = header_size_bytes();
-    const size_t endpoints_bytes = packet.message_type.num_endpoints * kEndpointElemSize;
-    const size_t payload_bytes = packet.message_type.data_size;
-    return fixed + endpoints_bytes + payload_bytes;
-}
-
-std::shared_ptr<serialized_buffer_t> make_serialized_buffer(const size_t size)
-{
-    auto out = std::make_shared<serialized_buffer_t>();
-    out->data = std::shared_ptr<uint8_t[]>(new uint8_t[size],
-                                           std::default_delete<uint8_t[]>());
-    out->size = size;
-    return out;
-}
-
-
-template<class T>
-static void append_trivial(std::vector<std::uint8_t> & out, const T & v)
-{
-    static_assert(std::is_trivially_copyable_v<T>, "serialization requires trivially copyable");
-    auto p = reinterpret_cast<const std::uint8_t *>(&v);
-    out.insert(out.end(), p, p + sizeof(T));
-}
-
-static void append_bytes(std::vector<std::uint8_t> & out, const void * src, std::size_t n)
-{
-    const auto * p = static_cast<const std::uint8_t *>(src);
-    out.insert(out.end(), p, p + n);
-}
-
-SEDSPRINTF_STATUS serialize_packet(const std::shared_ptr<telemetry_packet_t> & packet,
-                                   const std::shared_ptr<serialized_buffer_t> & buffer)
-{
-    if (!packet || !buffer || !buffer->data) return SEDSPRINTF_ERROR;
-
-    const std::size_t size = get_packet_size(*packet);
-
-    // Build into a temporary vector first (no pointer math)
-    std::vector<std::uint8_t> bytes;
-    bytes.reserve(size); // avoid reallocations
-
-    // ---- header (fixed part) ----
-    append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.type));
-    append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.data_size));
-    append_trivial<std::uint64_t>(bytes, static_cast<std::uint64_t>(packet->timestamp));
-    append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.num_endpoints));
-
-    // ---- endpoints array (values only; never serialize pointers) ----
-    for (int i = 0; i < packet->message_type.num_endpoints; ++i)
+    // ---- UTF-8 validation (simple, enough for sender check like Rust does) ----
+    static bool is_valid_utf8(const std::uint8_t * s, std::size_t n)
     {
-        append_trivial<std::uint32_t>(bytes, static_cast<std::uint32_t>(packet->message_type.endpoints[i]));
-    }
-
-    // ---- payload ----
-    if (packet->message_type.data_size > 0)
-    {
-        if (!packet->data) return SEDSPRINTF_ERROR;
-        append_bytes(bytes, packet->data.get(), packet->message_type.data_size);
-    }
-
-    // Sanity check: computed size should match expected
-    if (bytes.size() != size)
-    {
-        return SEDSPRINTF_ERROR;
-    }
-
-    // Copy once into the caller-provided buffer
-    if (buffer->size < bytes.size()) return SEDSPRINTF_ERROR;
-    std::memcpy(buffer->data.get(), bytes.data(), bytes.size());
-
-    return SEDSPRINTF_OK;
-}
-
-
-std::shared_ptr<telemetry_packet_t>
-deserialize_packet(const std::shared_ptr<serialized_buffer_t> & serialized)
-{
-    if (!serialized || !serialized->data) return {};
-
-    ByteReader r{serialized->data.get(), serialized->size, 0};
-
-    if (r.size < header_size_bytes()) return {};
-
-    // ---- read fixed header ----
-    uint32_t type_u32 = 0;
-    uint32_t dsz_u32 = 0;
-    uint64_t ts_u64 = 0;
-    uint32_t nep_u32 = 0;
-
-    if (!r.read(type_u32)) return {};
-    if (!r.read(dsz_u32)) return {};
-    if (!r.read(ts_u64)) return {};
-    if (!r.read(nep_u32)) return {};
-
-    // ---- bounds check for endpoints + payload ----
-    const std::size_t endpoints_bytes = static_cast<std::size_t>(nep_u32) * kEndpointElemSize;
-    const std::size_t total_need =
-            header_size_bytes() + endpoints_bytes + static_cast<std::size_t>(dsz_u32);
-    if (r.size < total_need) return {};
-
-    // ---- endpoints ----
-    std::shared_ptr<const data_endpoint_t[]> eps_sp;
-    if (nep_u32 > 0)
-    {
-        auto eps_up = std::make_unique<data_endpoint_t[]>(nep_u32);
-        for (std::size_t i = 0; i < static_cast<std::size_t>(nep_u32); ++i)
+        std::size_t i = 0;
+        while (i < n)
         {
-            uint32_t ep_u32 = 0;
-            if (!r.read(ep_u32)) return {};
-            eps_up[i] = static_cast<data_endpoint_t>(ep_u32);
+            std::uint8_t c = s[i];
+            if ((c & 0x80u) == 0x00u)
+            {
+                // 1-byte
+                ++i;
+            }
+            else if ((c & 0xE0u) == 0xC0u)
+            {
+                // 2-byte
+                if (i + 1 >= n) return false;
+                if ((s[i + 1] & 0xC0u) != 0x80u) return false;
+                // overlong check
+                std::uint8_t c0 = c & 0x1Fu;
+                if (c0 == 0) return false;
+                i += 2;
+            }
+            else if ((c & 0xF0u) == 0xE0u)
+            {
+                // 3-byte
+                if (i + 2 >= n) return false;
+                if ((s[i + 1] & 0xC0u) != 0x80u) return false;
+                if ((s[i + 2] & 0xC0u) != 0x80u) return false;
+                i += 3;
+            }
+            else if ((c & 0xF8u) == 0xF0u)
+            {
+                // 4-byte
+                if (i + 3 >= n) return false;
+                if ((s[i + 1] & 0xC0u) != 0x80u) return false;
+                if ((s[i + 2] & 0xC0u) != 0x80u) return false;
+                if ((s[i + 3] & 0xC0u) != 0x80u) return false;
+                i += 4;
+            }
+            else
+            {
+                return false;
+            }
         }
-        // move unique_ptr -> shared_ptr with array deleter
-        eps_sp = std::shared_ptr<const data_endpoint_t[]>(
-            eps_up.release(), std::default_delete<const data_endpoint_t[]>());
+        return true;
     }
 
-    // ---- payload (zero-copy alias into serialized buffer allocation) ----
-    const uint8_t * payload = r.current();
-    if (!r.skip(dsz_u32)) return {};
-
-    // ---- build packet ----
-    auto pkt = std::make_shared<telemetry_packet_t>();
-    pkt->message_type.type = static_cast<data_type_t>(type_u32);
-    pkt->message_type.data_size = static_cast<std::size_t>(dsz_u32);
-    pkt->message_type.num_endpoints = static_cast<std::size_t>(nep_u32);
-    pkt->message_type.endpoints = std::move(eps_sp);
-    pkt->timestamp = static_cast<std::time_t>(ts_u64);
-
-    if (pkt->message_type.data_size > 0)
+    // ---- serialize_packet ----
+    std::vector<std::uint8_t> serialize_packet(const TelemetryPacket & pkt)
     {
-        // alias lifetime to the serialized buffer’s allocation
-        pkt->data = std::shared_ptr<const void>(
-            serialized->data, static_cast<const void *>(payload));
-    }
-    else
-    {
-        pkt->data.reset();
+        const std::size_t cap = packet_wire_size(pkt);
+        std::vector<std::uint8_t> out;
+        out.reserve(cap);
+
+        // type
+        const auto ty = static_cast<std::uint32_t>(pkt.ty);
+        out.push_back(static_cast<std::uint8_t>(ty & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((ty >> 8) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((ty >> 16) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((ty >> 24) & 0xFFu));
+
+        // data_size (u32)
+        const auto dsz = static_cast<std::uint32_t>(pkt.data_size);
+        out.push_back(static_cast<std::uint8_t>(dsz & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((dsz >> 8) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((dsz >> 16) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((dsz >> 24) & 0xFFu));
+
+        // sender_len (u32) and later append sender bytes
+        const char * sender_c = pkt.sender ? pkt.sender : "";
+        const std::size_t sender_len_sz = std::strlen(sender_c);
+        const auto sender_len = static_cast<std::uint32_t>(sender_len_sz);
+        out.push_back(static_cast<std::uint8_t>(sender_len & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((sender_len >> 8) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((sender_len >> 16) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((sender_len >> 24) & 0xFFu));
+
+        // timestamp (u64 LE)
+        const std::uint64_t ts = pkt.timestamp;
+        for (int i = 0; i < 8; ++i)
+        {
+            out.push_back(static_cast<std::uint8_t>((ts >> (8 * i)) & 0xFFu));
+        }
+
+        // num_endpoints (u32)
+        const auto nep = static_cast<std::uint32_t>(pkt.endpoints ? pkt.endpoints->size() : 0);
+        out.push_back(static_cast<std::uint8_t>(nep & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((nep >> 8) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((nep >> 16) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((nep >> 24) & 0xFFu));
+
+        // endpoints (u32 each)
+        if (pkt.endpoints)
+        {
+            for (DataEndpoint ep: *pkt.endpoints)
+            {
+                const auto v = static_cast<std::uint32_t>(ep);
+                out.push_back(static_cast<std::uint8_t>(v & 0xFFu));
+                out.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu));
+                out.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFFu));
+                out.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFFu));
+            }
+        }
+
+        // sender bytes
+        out.insert(out.end(), sender_c, sender_c + sender_len_sz);
+
+        // payload
+        if (pkt.payload)
+        {
+            out.insert(out.end(), pkt.payload->begin(), pkt.payload->end());
+        }
+        return out;
     }
 
-    return pkt;
-}
+    // ---- deserialize_packet ----
+    TelemetryResult<TelemetryPacket> deserialize_packet(const std::vector<std::uint8_t> & buf)
+    {
+        ByteReader r(buf);
+
+        if (r.remaining() < header_size_bytes())
+        {
+            return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize("short header"));
+        }
+
+        const char * err = nullptr;
+
+        auto ty_raw_opt = r.read_u32(&err);
+        if (!ty_raw_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+        const std::uint32_t ty_raw = *ty_raw_opt;
+
+        // NOTE: uses the non-template overload from serialize.hpp
+        auto ty_opt = try_enum_from_u32(ty_raw);
+        if (!ty_opt)
+        {
+            return TelemetryResult<TelemetryPacket>::Err(TelemetryError::InvalidType());
+        }
+        const DataType ty = *ty_opt;
+
+        auto dsz_u32 = r.read_u32(&err);
+        if (!dsz_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+        const auto dsz = static_cast<std::size_t>(*dsz_u32);
+
+        auto sender_len_u32 = r.read_u32(&err);
+        if (!sender_len_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+        const auto sender_len = static_cast<std::size_t>(*sender_len_u32);
+
+        auto ts_u64 = r.read_u64(&err);
+        if (!ts_u64) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+        const std::uint64_t ts = *ts_u64;
+
+        auto nep_u32 = r.read_u32(&err);
+        if (!nep_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+        const auto nep = static_cast<std::size_t>(*nep_u32);
+
+        const std::size_t need =
+                header_size_bytes() + nep * ENDPOINT_ELEM_SIZE + dsz;
+        if (buf.size() < need)
+        {
+            return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize("short buffer"));
+        }
+
+        std::vector<DataEndpoint> eps;
+        eps.reserve(nep);
+        for (std::size_t i = 0; i < nep; ++i)
+        {
+            auto e_u32 = r.read_u32(&err);
+            if (!e_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+            // NOTE: endpoint conversion uses the dedicated overload
+            auto ep_opt = try_enum_from_u32_endpoint(*e_u32);
+            if (!ep_opt)
+            {
+                return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize("bad endpoint"));
+            }
+            eps.push_back(*ep_opt);
+        }
+
+        // sender bytes -> validate UTF-8 -> leak to persistent const char* (match Rust &'static str)
+        auto sender_ptr_opt = r.read_bytes(sender_len, &err);
+        if (!sender_ptr_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+        const std::uint8_t * sender_ptr = *sender_ptr_opt;
+        if (!is_valid_utf8(sender_ptr, sender_len))
+        {
+            return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize("sender not UTF-8"));
+        }
+        auto sender_c = new char[sender_len + 1];
+        std::memcpy(sender_c, sender_ptr, sender_len);
+        sender_c[sender_len] = '\0';
+
+        // payload bytes
+        auto payload_ptr_opt = r.read_bytes(dsz, &err);
+        if (!payload_ptr_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
+        const std::uint8_t * payload_ptr = *payload_ptr_opt;
+        std::vector payload(payload_ptr, payload_ptr + dsz);
+
+        // Construct packet (mirrors Rust)
+        auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload));
+        auto endpoints_arc = std::make_shared<const std::vector<DataEndpoint>>(std::move(eps));
+
+        TelemetryPacket pkt;
+        pkt.ty = ty;
+        pkt.data_size = dsz;
+        pkt.sender = sender_c; // leaked, as in Rust Box::leak
+        pkt.endpoints = std::move(endpoints_arc);
+        pkt.timestamp = ts;
+        pkt.payload = std::move(payload_arc);
+
+        // Validate invariants similar to Rust new()/validate()
+        if (auto v = pkt.Validate(); v.is_err())
+        {
+            return TelemetryResult<TelemetryPacket>::Err(v.unwrap_err());
+        }
+        return TelemetryResult<TelemetryPacket>::Ok(std::move(pkt));
+    }
+} // namespace seds

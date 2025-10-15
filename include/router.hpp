@@ -105,6 +105,7 @@ namespace seds
     class Router
     {
     public:
+        using TransmitFn = std::function<TelemetryResult<void*>(const std::vector<std::uint8_t>&)>;
         // Tx: std::function<TelemetryResult<void*>(const std::vector<uint8_t>&)>
         template<typename Tx>
         Router(std::optional<Tx> transmit, BoardConfig cfg, std::unique_ptr<Clock> clock)

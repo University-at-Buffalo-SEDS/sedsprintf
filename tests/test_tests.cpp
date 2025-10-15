@@ -267,7 +267,9 @@ TEST(Router, QueuedRoundtripBetweenTwoRouters) {
     ASSERT_TRUE(rx_router.process_received_queue().is_ok());
 
     ASSERT_TRUE(seen->has_value()) << "no packet delivered";
-    const auto& [ty, vals] = *seen;
+    const auto& pair = seen->value();
+    const auto& ty   = pair.first;
+    const auto& vals = pair.second;
     EXPECT_EQ(ty, DataType::GpsData);
     EXPECT_EQ(vals, data);
 }
@@ -434,8 +436,6 @@ TEST(Helpers, CopyTelemetryPacket) {
     // C++ already had this helper in your original suite; we exercise the same semantics the Rust test ports mention.
     // Signature assumed: bool CopyTelemetryPacket(TelemetryPacket* dest, const TelemetryPacket* src)
     // If yours returns int / TelemetryResult, adapt the EXPECTs accordingly.
-    extern bool CopyTelemetryPacket(TelemetryPacket* dest, const TelemetryPacket* src);
-
     // (1) null dest → error/false
     TelemetryPacket src = FakeTelemetryPacketBytes();
     EXPECT_FALSE(CopyTelemetryPacket(nullptr, &src));

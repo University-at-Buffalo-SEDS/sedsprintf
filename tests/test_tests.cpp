@@ -1,213 +1,120 @@
+// reimpl_tests.cpp
 #include <gtest/gtest.h>
-#include <cstring>
-#include <memory>
-#include <sstream>
-#include <iomanip>
+#include "router.hpp"
+#include "serialize.hpp"
+#include "telemetry_packet.hpp"
+#include "config.hpp"
+#include "error.hpp"
+#include "result.hpp"
+#include <atomic>
+#include <mutex>
+#include "helpers.cpp"
 
-#include "serialize.h"
-#include "telemetry_router.hpp"
+using namespace seds;
+using testhelpers::get_handler;
+using testhelpers::get_sd_card_handler;
+using testhelpers::handle_errors;
 
-// ========================== helpers ==========================
-
-// make a managed payload by copying from a C array
-template<typename T, size_t N>
-static std::shared_ptr<const void> make_payload_copy(const T (& arr)[N])
-{
-    const size_t bytes = sizeof(T) * N;
-    const std::shared_ptr<uint8_t[]> block(new uint8_t[bytes], std::default_delete<uint8_t[]>());
-    std::memcpy(block.get(), arr, bytes);
-    // alias as shared_ptr<const void> to the same allocation
-    return std::shared_ptr<const void>(block, block.get());
+TEST(NamesTables, MessageTableCountMatchesEnum) {
+#ifdef SEDS_HAS_MESSAGE_TABLES
+    EXPECT_EQ(MESSAGE_ELEMENTS.size(), static_cast<size_t>(DataType::_COUNT));
+#else
+    GTEST_SKIP() << "MESSAGE_ELEMENTS not wired in C++ build.";
+#endif
 }
 
-static ConstPacketPtr to_const(const PacketPtr & p)
-{
-    return std::const_pointer_cast<const telemetry_packet_t>(p);
+
+static std::vector<uint8_t> f32_le(const std::vector<float>& v) {
+    std::vector<uint8_t> out;
+    out.reserve(v.size() * 4);
+    for (float f : v) {
+        static_assert(sizeof(float)==4, "float must be 4 bytes");
+        uint32_t le;
+        std::memcpy(&le, &f, 4);              // copy float bits
+        // ensure little-endian order explicitly
+        out.push_back(uint8_t(le & 0xFF));
+        out.push_back(uint8_t((le >> 8) & 0xFF));
+        out.push_back(uint8_t((le >> 16) & 0xFF));
+        out.push_back(uint8_t((le >> 24) & 0xFF));
+    }
+    return out;
 }
 
-// ====================== setup for router testing ============================
-static uint8_t sd_card_called = 0;
-static uint8_t transmit_called = 0;
+TEST(Serialize, RoundtripGps) {
+    std::vector<DataEndpoint> endpoints{DataEndpoint::SD_CARD, DataEndpoint::RADIO};
+    auto pkt_r = TelemetryPacket::from_f32(DataType::GPS_DATA,
+                          endpoints,
+                          0,
+                          std::vector<float>{5.2141414f, 3.1342144f, 1.1231232f});
+    ASSERT_FALSE(pkt_r.is_err());
+    auto pkt = pkt_r.value();
 
+    ASSERT_TRUE(pkt.validate().is_ok());
 
-// Smart-pointer packets to capture results
-static auto sd_card_data = std::make_shared<telemetry_packet_t>();
-static auto transmit_data = std::make_shared<telemetry_packet_t>();
+    auto ser_r = Serializer::serialize(pkt);
+    ASSERT_FALSE(ser_r.is_err());
+    const auto& bytes = ser_r.value();
 
-// SD card receive handler (now takes shared_ptr<telemetry_packet_t>)
-static SEDSPRINTF_STATUS sd_card_handler(std::shared_ptr<telemetry_packet_t> packet)
-{
-    sd_card_called = 1;
-    // share endpoint list + payload into our capture packet
-    return sedsprintf::copy_telemetry_packet(sd_card_data, packet);
+    auto rpkt_r = Serializer::deserialize(bytes);
+    ASSERT_FALSE(rpkt_r.is_err());
+    const auto& rpkt = rpkt_r.value();
+    ASSERT_TRUE(rpkt.validate().is_ok());
+
+    EXPECT_EQ(rpkt.ty, pkt.ty);
+    EXPECT_EQ(rpkt.data_size, pkt.data_size);
+    EXPECT_EQ(rpkt.timestamp, pkt.timestamp);
+    EXPECT_EQ(*rpkt.endpoints, *pkt.endpoints);
+    EXPECT_EQ(*rpkt.payload, *pkt.payload);
 }
 
-// Transmit helper (now takes shared_ptr<serialized_buffer_t>)
-static SEDSPRINTF_STATUS transmit_helper(const std::shared_ptr<serialized_buffer_t> & serialized_buffer)
-{
-    transmit_called = 1;
-
-    const auto packet = deserialize_packet(serialized_buffer);
-    if (!packet) return SEDSPRINTF_ERROR;
-
-    if (sedsprintf::copy_telemetry_packet(transmit_data, packet) != SEDSPRINTF_OK)
-        return SEDSPRINTF_ERROR;
-
-    if (sedsprintf::validate_telemetry_packet(to_const(packet)) != SEDSPRINTF_OK)
-        return SEDSPRINTF_ERROR;
-
-    return SEDSPRINTF_OK;
+TEST(Formatting, HeaderMatches) {
+    const std::vector endpoints{DataEndpoint::SD_CARD, DataEndpoint::RADIO};
+    auto pkt_r = TelemetryPacket::from_f32(DataType::GPS_DATA,
+                          endpoints,
+                          0,
+                          std::vector{1.0f, 2.0f, 3.0f});
+    ASSERT_FALSE(pkt_r.is_err());
+    auto s = pkt_r.value().header_string();
+    // adjust expected "Sender" if your C++ sender differs
+    EXPECT_EQ(s, "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0");
 }
 
-// Board config for testing (one local endpoint: SD_CARD -> sd_card_handler)
-static board_config_t make_test_board_config()
-{
-    constexpr size_t N = 1;
-    auto up = std::make_unique<data_endpoint_handler_t[]>(N);
-    up[0] = data_endpoint_handler_t{SD_CARD, sd_card_handler};
-    const std::shared_ptr<const data_endpoint_handler_t[]> sp(up.release(),
-                                                              std::default_delete<const data_endpoint_handler_t[]>());
-    return board_config_t{sp, N};
-}
-
-// =========================== TESTS ===========================
-
-TEST(TelemetryRouterTest, HandlesDataFlow)
-{
-    // prepare capture packets (types set; payload will be shared into them)
-    *sd_card_data = telemetry_packet_t{message_type[GPS_DATA], 0, nullptr};
-    *transmit_data = telemetry_packet_t{message_type[GPS_DATA], 0, nullptr};
-
-    const board_config_t cfg = make_test_board_config();
-    const sedsprintf router(transmit_helper, cfg);
-
-    constexpr float data[message_elements[GPS_DATA]] = {
-        5.214141324324f, 3.1342143243214132f, 1.123123123123f
+TEST(Router, SendsAndReceives) {
+    // capture tx
+    auto tx_seen = std::make_shared<std::optional<TelemetryPacket>>(std::nullopt);
+    auto tx_seen_m = std::make_shared<std::mutex>();
+    Router::TxFn tx = [tx_seen, tx_seen_m](const std::vector<uint8_t>& bytes) -> Result<void, ErrorInfo> {
+        auto rpkt_r = Serializer::deserialize(bytes);
+        if (rpkt_r.is_err()) return Result<void, ErrorInfo>::err(rpkt_r.error());
+        std::lock_guard<std::mutex> lk(*tx_seen_m);
+        *tx_seen = rpkt_r.value();
+        return Result<void, ErrorInfo>::ok();
     };
 
-    sd_card_called = 0;
-    transmit_called = 0;
+    // local sd handler (decode floats)
+    auto mtx = std::make_shared<std::mutex>();
+    auto captured = std::make_shared<std::optional<std::pair<DataType, std::vector<float>>>>(std::nullopt);
+    EndpointHandler sd = get_sd_card_handler(mtx, captured);
 
-    // Log using convenience that copies raw -> managed payload
-    ASSERT_EQ(router.log(message_type[GPS_DATA],
-                  data),
-              SEDSPRINTF_OK);
+    Router r(tx, BoardConfig({sd}));
 
-    ASSERT_EQ(sd_card_called, 1);
-    ASSERT_EQ(transmit_called, 1);
+    std::vector<float> data{1.f, 2.f, 3.f};
+    auto res = r.log(DataType::GPS_DATA, f32_le(data), 0);
+    ASSERT_TRUE(res.is_ok());
 
-    // Validate packets
-    ASSERT_EQ(sedsprintf::validate_telemetry_packet(to_const(sd_card_data)), SEDSPRINTF_OK);
-    ASSERT_EQ(sedsprintf::validate_telemetry_packet(to_const(transmit_data)), SEDSPRINTF_OK);
+    // tx saw same type & bytes
+    {
+        std::lock_guard<std::mutex> lk(*tx_seen_m);
+        ASSERT_TRUE(tx_seen->has_value());
+        EXPECT_EQ(tx_seen->value().ty, DataType::GPS_DATA);
+        EXPECT_EQ(tx_seen->value().payload->size(), 3u * 4u);
+    }
 
-    ASSERT_EQ(sd_card_data->message_type.type, transmit_data->message_type.type);
-    ASSERT_EQ(sd_card_data->timestamp, transmit_data->timestamp);
-    ASSERT_TRUE(sd_card_data->data);
-    ASSERT_TRUE(transmit_data->data);
-
-    // Compare payload bytes
-    ASSERT_EQ(
-        std::memcmp(sd_card_data->data.get(),
-            transmit_data->data.get(),
-            sd_card_data->message_type.data_size),
-        0);
-}
-
-TEST(SerializationTest, HandlesSerializationAndDeserialization)
-{
-    // Build a managed packet with payload
-    constexpr float data[message_elements[GPS_DATA]] = {
-        5.214141324324f, 3.1342143243214132f, 1.123123123123f
-    };
-
-    const auto test_packet = std::make_shared<telemetry_packet_t>();
-    test_packet->message_type = message_type[GPS_DATA];
-    test_packet->timestamp = 0;
-    test_packet->data = make_payload_copy(data); // managed payload
-
-    const size_t size = get_packet_size(*test_packet);
-    auto serialized = make_serialized_buffer(size);
-
-    ASSERT_TRUE(serialized);
-    ASSERT_EQ(serialized->size, size);
-
-    ASSERT_EQ(serialize_packet(test_packet, serialized), SEDSPRINTF_OK);
-
-    // sanity on buffer
-    ASSERT_TRUE(serialized->data);
-    ASSERT_EQ(serialized->size, size);
-
-    auto deserialized = deserialize_packet(serialized);
-    ASSERT_TRUE(deserialized);
-
-    ASSERT_EQ(sedsprintf::validate_telemetry_packet(to_const(deserialized)), SEDSPRINTF_OK);
-
-    // header fields
-    EXPECT_EQ(deserialized->message_type.type, test_packet->message_type.type);
-    EXPECT_EQ(deserialized->message_type.data_size, test_packet->message_type.data_size);
-    EXPECT_EQ(deserialized->timestamp, test_packet->timestamp);
-
-    // payload bytes
-    ASSERT_TRUE(deserialized->data);
-    EXPECT_EQ(
-        std::memcmp(deserialized->data.get(),
-            test_packet->data.get(),
-            test_packet->message_type.data_size),
-        0);
-
-    // extract into local arrays
-    float received[message_elements[GPS_DATA]]{};
-    ASSERT_EQ(sedsprintf::get_data_f32(to_const(deserialized),
-                  received,
-                  message_elements[GPS_DATA]),
-              SEDSPRINTF_OK);
-
-    float local_copy[message_elements[GPS_DATA]]{};
-    ASSERT_EQ(sedsprintf::get_data_f32(to_const(test_packet),
-                  local_copy,
-                  message_elements[GPS_DATA]),
-              SEDSPRINTF_OK);
-
-    EXPECT_EQ(local_copy[0], received[0]);
-    EXPECT_EQ(local_copy[1], received[1]);
-    EXPECT_EQ(local_copy[2], received[2]);
-    EXPECT_EQ(test_packet->message_type.data_size, sizeof(data));
-}
-
-TEST(HeaderToStringTest, ToStringWorks)
-{
-    constexpr float data[message_elements[GPS_DATA]] = {
-        5.214141324324f, 3.1342143243214132f, 1.123123123123f
-    };
-
-    const auto packet = std::make_shared<telemetry_packet_t>();
-    packet->message_type = message_type[GPS_DATA];
-    packet->timestamp = 0;
-    packet->data = make_payload_copy(data);
-
-    const std::string header_str = sedsprintf::telemetry_packet_metadata_to_string(to_const(packet));
-    const std::string expected_str = "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0";
-    EXPECT_EQ(header_str, expected_str);
-}
-
-TEST(PacketToStringTest, ToStringWorks)
-{
-    constexpr float data[message_elements[GPS_DATA]] = {
-        5.214141324324f, 3.134584235724385843295243214324321f, 1.123123123123f
-    };
-
-    const auto packet = std::make_shared<telemetry_packet_t>();
-    packet->message_type = message_type[GPS_DATA];
-    packet->timestamp = 0;
-    packet->data = make_payload_copy(data);
-
-    const std::string packet_string = sedsprintf::packet_to_string(to_const(packet));
-
-    std::ostringstream expected;
-    expected.setf(std::ios::fixed, std::ios::floatfield);
-    expected << "Type: GPS_DATA, Size: 12, Endpoints: [SD_CARD, RADIO], Timestamp: 0, Data: ";
-    expected << std::setprecision(MAX_PRECISION)
-            << data[0] << ", " << data[1] << ", " << data[2];
-
-    EXPECT_EQ(packet_string, expected.str());
+    // local handler decoded floats
+    {
+        std::lock_guard<std::mutex> lk(*mtx);
+        ASSERT_TRUE(captured->has_value());
+        EXPECT_EQ(captured->value().first, DataType::GPS_DATA);
+        EXPECT_EQ(captured->value().second, data);
+    }
 }

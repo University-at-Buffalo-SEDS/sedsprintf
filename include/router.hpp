@@ -321,11 +321,10 @@ namespace seds
 
     // -------------------- Template definitions (headerized) --------------------
     template<typename T>
-    inline TelemetryResult<void *> Router::log(DataType ty, const T * data, std::size_t n, std::uint64_t timestamp)
+    TelemetryResult<void *> Router::log(const DataType ty, const T * data, std::size_t n, std::uint64_t timestamp)
     {
         const auto & meta = message_meta(ty);
-        const std::size_t got = n * LeBytes<T>::WIDTH;
-        if (got != meta.data_size)
+        if (const std::size_t got = n * LeBytes<T>::WIDTH; got != meta.data_size)
         {
             return TelemetryResult<void *>::Err(TelemetryError::SizeMismatch(meta.data_size, got));
         }
@@ -336,7 +335,7 @@ namespace seds
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload_vec));
         TelemetryResult<TelemetryPacket> pkt_res =
                 TelemetryPacket::New(ty,
-                                     std::vector<DataEndpoint>(meta.endpoints, meta.endpoints + meta.num_endpoints),
+                                     std::vector(meta.endpoints),
                                      DEVICE_IDENTIFIER,
                                      timestamp,
                                      std::move(payload_arc));
@@ -345,7 +344,7 @@ namespace seds
     }
 
     template<typename T>
-    inline TelemetryResult<void *> Router::log_queue(DataType ty, const T * data, std::size_t n,
+    TelemetryResult<void *> Router::log_queue(DataType ty, const T * data, std::size_t n,
                                                      std::uint64_t timestamp)
     {
         const auto & meta = message_meta(ty);
@@ -361,7 +360,7 @@ namespace seds
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload_vec));
         TelemetryResult<TelemetryPacket> pkt_res =
                 TelemetryPacket::New(ty,
-                                     std::vector<DataEndpoint>(meta.endpoints, meta.endpoints + meta.num_endpoints),
+                                     std::vector(meta.endpoints),
                                      DEVICE_IDENTIFIER,
                                      timestamp,
                                      std::move(payload_arc));

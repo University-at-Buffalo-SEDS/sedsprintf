@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <cstddef>
 #include <array>
+#include <vector>
+
 
 namespace seds
 {
@@ -101,11 +103,10 @@ namespace seds
     extern const std::array<MessageType, DATA_TYPE_COUNT> MESSAGE_INFO_TYPES;
 
     // ---------------------- Not User Editable ----------------------
-    struct MessageMeta
-    {
-        DataType ty;
+    struct MessageMeta {
+        DataType type;
         std::size_t data_size;
-        const DataEndpoint * endpoints; // points to a static array
+        std::vector<DataEndpoint> endpoints;
         std::size_t num_endpoints;
     };
 
@@ -130,12 +131,4 @@ namespace seds
         return MESSAGE_TYPES[static_cast<std::size_t>(ty)];
     }
 
-    // -------------- Implementation details needed by headers --------------
-    namespace detail
-    {
-        // Endpoint sets used by MESSAGE_TYPES; exposed for translation unit internal use.
-        extern const std::array<DataEndpoint, 2> ENDPOINTS_SD_AND_RADIO;
-        extern const std::array<DataEndpoint, 1> ENDPOINTS_SD_ONLY;
-        extern const std::array<DataEndpoint, 1> ENDPOINTS_RADIO_ONLY;
-    } // namespace detail
 } // namespace seds

@@ -457,7 +457,7 @@ static int log_unaligned_slice_queue(Router & router, DataType ty, const void * 
     std::vector<std::uint8_t> payload = encode_slice_le<T>(tmp);
 
     auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload));
-    const std::vector eps(meta.endpoints, meta.endpoints + meta.num_endpoints);
+    const std::vector eps(meta.endpoints);
     auto pkt_res = TelemetryPacket::New(ty, eps, DEVICE_IDENTIFIER, ts, std::move(payload_arc));
     if (pkt_res.is_err()) return status_from_err(pkt_res.unwrap_err());
     return ok_or_status(router.queue_tx_message(pkt_res.unwrap()));

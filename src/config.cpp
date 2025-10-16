@@ -10,7 +10,7 @@ namespace seds
         /* ImuData        */ 6, // ax, ay, az, gx, gy, gz
         /* BatteryStatus  */ 4, // e.g., v, i, soc, temp
         /* SystemStatus   */ 1, // one u32 bitfield or code
-        /* BarometerData  */ 3 // one float (pressure or altitude)
+        /* BarometerData  */ 3 // 3 floats pressure, altitude, temperature
     };
 
     // ----------------- Data kinds (MESSAGE_DATA_TYPES) -----------------

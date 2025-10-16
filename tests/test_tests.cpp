@@ -404,7 +404,7 @@ TEST(Timeouts, ProcessAllQueuesHandlesU64Wraparound) {
 
 TEST(Helpers, PacketHexToString) {
     // Builds the exact string checked in the Rust port; here we assert our C++ Hex formatter matches.
-    // If your TelemetryPacket exposes ToHexString(), use it. Otherwise, use ToString() if it prints hex in the same form.
+    // If the TelemetryPacket exposes ToHexString(), use it. Otherwise, use ToString() if it prints hex in the same form.
     const auto pkt = FakeTelemetryPacketBytes();
 
     // Prefer ToHexString() if available; otherwise fall back to ToString() (kept for compatibility).
@@ -412,7 +412,7 @@ TEST(Helpers, PacketHexToString) {
 #if defined(HAVE_TO_HEX_STRING)
     got = pkt.ToHexString();
 #else
-    got = pkt.ToHexString(); // your codebase already had this test in C++, per the Rust comments
+    got = pkt.ToHexString(); // the codebase already had this test in C++, per the Rust comments
 #endif
 
     const auto expect =
@@ -422,9 +422,9 @@ TEST(Helpers, PacketHexToString) {
 }
 
 TEST(Helpers, CopyTelemetryPacket) {
-    // C++ already had this helper in your original suite; we exercise the same semantics the Rust test ports mention.
+    // C++ already had this helper in the original suite; we exercise the same semantics the Rust test ports mention.
     // Signature assumed: bool CopyTelemetryPacket(TelemetryPacket* dest, const TelemetryPacket* src)
-    // If yours returns int / TelemetryResult, adapt the EXPECTs accordingly.
+    // If it returns an int / TelemetryResult, adapt the EXPECTs accordingly.
     // (1) null dest → error/false
     TelemetryPacket src = FakeTelemetryPacketBytes();
     EXPECT_FALSE(CopyTelemetryPacket(nullptr, &src));

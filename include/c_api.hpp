@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-// --------- public C ABI mirror of your Rust layout ---------
+// --------- public C ABI mirror of the Rust layout ---------
 
 // constants (sizes/kinds)
 enum : std::size_t { SIZE_OF_U8 = 1, SIZE_OF_U16 = 2, SIZE_OF_U32 = 4, SIZE_OF_F64 = 8 };

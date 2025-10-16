@@ -24,7 +24,7 @@ using namespace seds;
 class StepClock final : public Clock
 {
 public:
-    static std::unique_ptr<Clock> NewBox(const uint64_t start, const uint64_t step)
+    static std::unique_ptr<Clock> NewBox(uint64_t start, uint64_t step)
     {
         return std::unique_ptr<Clock>(new StepClock(start, step));
     }
@@ -35,7 +35,7 @@ public:
         return std::unique_ptr<Clock>(new StepClock(0, 0));
     }
 
-    StepClock(const uint64_t start, const uint64_t step) : t_(start), step_(step)
+    StepClock(uint64_t start, uint64_t step) : t_(start), step_(step)
     {
     }
 
@@ -114,7 +114,7 @@ struct TestBus
 TEST(Serialize, RoundtripGps)
 {
     // GPS: 3 * f32
-    std::vector endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
+    std::vector<DataEndpoint> endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
     auto pkt = MakeGpsPacketFromF32s({5.2141414f, 3.1342144f, 1.1231232f}, endpoints, 0);
 
     auto v = pkt.Validate();
@@ -202,7 +202,7 @@ TEST(Router, SendsAndReceives)
 
     auto router = Router(
         /*transmit*/ std::optional<Router::TransmitFn>(transmit),
-                     BoardConfig(std::vector{sd_handler}),
+                     BoardConfig(std::vector<EndpointHandler>{sd_handler}),
                      StepClock::NewDefaultBox());
 
     // send GPS_DATA (3 * f32) using Router::log (uses default endpoints from schema)
@@ -393,14 +393,14 @@ TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget)
         return TelemetryResult<void *>::Ok(nullptr);
     };
 
-    Router r(std::optional(tx),
+    Router r(std::optional<Router::TransmitFn>(tx),
              BoardConfig(std::vector{handler}),
              StepClock::NewBox(/*start=*/0, /*step=*/10));
 
     // Seed work in both queues (5 of each)
     for (int i = 0; i < 5; ++i)
     {
-        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector{1.0f, 2.0f, 3.0f}, 0).is_ok());
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
         ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({4.0f, 5.0f, 6.0f}, 1)).is_ok());
     }
 

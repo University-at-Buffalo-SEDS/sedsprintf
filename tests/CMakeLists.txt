@@ -21,3 +21,12 @@ endif ()
 
 include(GoogleTest)
 gtest_discover_tests(run_tests)
+
+
+# Path to the c-system-test folder in the repo
+set(C_SYSTEM_TEST_DIR "${CMAKE_SOURCE_DIR}/c-system-test")
+
+# Make it available as a macro for the test sources
+target_compile_definitions(run_tests PRIVATE
+        C_SYSTEM_TEST_DIR="${C_SYSTEM_TEST_DIR}"
+)

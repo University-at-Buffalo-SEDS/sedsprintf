@@ -5,9 +5,6 @@
 
 extern "C" int swprintf(wchar_t * s, size_t n, const wchar_t * fmt, ...);
 
-// Create a TU-level undefined reference without any runtime cost.
-static void * const s_force_link_swprintf = (void *) &swprintf;
-
 namespace seds
 {
     // Simple stdout fallback (works under std; no-op alternative could be added)
@@ -31,7 +28,7 @@ namespace seds
 
     TelemetryResult<void *> Router::process_all_queues()
     {
-        if (auto r1 = process_send_queue(); r1.is_err()) return r1;
+        if (const auto r1 = process_send_queue(); r1.is_err()) return r1;
         return process_received_queue();
     }
 
@@ -44,7 +41,7 @@ namespace seds
     void Router::clear_rx_queue() { received_queue_.clear(); }
     void Router::clear_tx_queue() { transmit_queue_.clear(); }
 
-    TelemetryResult<void *> Router::process_tx_queue_with_timeout(std::uint32_t timeout_ms)
+    TelemetryResult<void *> Router::process_tx_queue_with_timeout(const std::uint32_t timeout_ms)
     {
         const std::uint64_t start = clock_->now_ms();
         while (!transmit_queue_.empty())
@@ -66,7 +63,7 @@ namespace seds
         return receive_serialized(std::get<std::vector<std::uint8_t> >(item));
     }
 
-    TelemetryResult<void *> Router::process_rx_queue_with_timeout(std::uint32_t timeout_ms)
+    TelemetryResult<void *> Router::process_rx_queue_with_timeout(const std::uint32_t timeout_ms)
     {
         const std::uint64_t start = clock_->now_ms();
         while (!received_queue_.empty())
@@ -79,7 +76,7 @@ namespace seds
         return TelemetryResult<void *>::Ok(nullptr);
     }
 
-    TelemetryResult<void *> Router::process_all_queues_with_timeout(std::uint32_t timeout_ms)
+    TelemetryResult<void *> Router::process_all_queues_with_timeout(const std::uint32_t timeout_ms)
     {
         const bool drain_fully = (timeout_ms == 0);
         const std::uint64_t start = drain_fully ? 0 : clock_->now_ms();
@@ -248,7 +245,7 @@ namespace seds
         }
 
         // Serialize exactly once.
-        std::vector<std::uint8_t> bytes = serialize_packet(pkt);
+        const std::vector<std::uint8_t> bytes = serialize_packet(pkt);
 
         if (send_remote && transmit_)
         {

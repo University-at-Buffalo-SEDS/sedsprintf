@@ -49,15 +49,15 @@ namespace seds
     } // namespace detail
 
     // ----------------- MESSAGE_TYPES table (size + default endpoints) -----------------
-    const std::array<MessageMeta, DATA_TYPE_COUNT> MESSAGE_TYPES = []()
+    const std::array<MessageMeta, DATA_TYPE_COUNT> MESSAGE_TYPES = []
     {
         std::array<MessageMeta, DATA_TYPE_COUNT> t{};
 
-        auto make = [](DataType ty,
-                       MessageDataType k,
-                       std::size_t elems,
+        auto make = [](const DataType ty,
+                       const MessageDataType k,
+                       const std::size_t elems,
                        const DataEndpoint * eps,
-                       std::size_t nep) -> MessageMeta
+                       const std::size_t nep) -> MessageMeta
         {
             return MessageMeta{
                 ty,

@@ -66,7 +66,7 @@ namespace seds
         {
         }
 
-        [[nodiscard]] bool is_local_endpoint(DataEndpoint ep) const
+        [[nodiscard]] bool is_local_endpoint(const DataEndpoint ep) const
         {
             return std::any_of(handlers.begin(), handlers.end(),
                                [&](const EndpointHandler & h) { return h.endpoint == ep; });
@@ -196,7 +196,6 @@ namespace seds
                                                       std::optional<DataEndpoint> dest,
                                                       const TelemetryError & e);
 
-    private:
         std::function<TelemetryResult<void *>(const std::vector<std::uint8_t> &)> transmit_;
         BoardConfig cfg_;
         std::vector<RxQueueItem> received_queue_;
@@ -263,7 +262,7 @@ namespace seds
 
         static void write_le(std::int16_t v, std::uint8_t * out)
         {
-            auto u = static_cast<std::uint16_t>(v);
+            const auto u = static_cast<std::uint16_t>(v);
             LeBytes<std::uint16_t>::write_le(u, out);
         }
     };
@@ -275,7 +274,7 @@ namespace seds
 
         static void write_le(std::int32_t v, std::uint8_t * out)
         {
-            auto u = static_cast<std::uint32_t>(v);
+            const auto u = static_cast<std::uint32_t>(v);
             LeBytes<std::uint32_t>::write_le(u, out);
         }
     };
@@ -287,7 +286,7 @@ namespace seds
 
         static void write_le(std::int64_t v, std::uint8_t * out)
         {
-            auto u = static_cast<std::uint64_t>(v);
+            const auto u = static_cast<std::uint64_t>(v);
             LeBytes<std::uint64_t>::write_le(u, out);
         }
     };

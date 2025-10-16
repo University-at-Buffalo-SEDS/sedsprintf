@@ -559,7 +559,7 @@ namespace seds_detail
  * @brief C++ convenience wrapper that deduces element kind/size from @p T and logs immediately.
  */
 template<typename T>
-static inline SedsResult seds_router(SedsRouter * router,
+static SedsResult seds_router(SedsRouter * router,
                                      SedsDataType datatype,
                                      const T * data,
                                      size_t count,
@@ -567,7 +567,7 @@ static inline SedsResult seds_router(SedsRouter * router,
 {
     return seds_router_log_typed(router,
                                  datatype,
-                                 (const void *) data,
+                                 static_cast<const void *>(data),
                                  count,
                                  seds_detail::elem_traits<T>::size,
                                  seds_detail::elem_traits<T>::kind,
@@ -578,7 +578,7 @@ static inline SedsResult seds_router(SedsRouter * router,
  * @brief C++ convenience wrapper that deduces element kind/size from @p T and queues the log.
  */
 template<typename T>
-static inline SedsResult seds_router_queue(SedsRouter * router,
+static SedsResult seds_router_queue(SedsRouter * router,
                                            SedsDataType datatype,
                                            const T * data,
                                            size_t count,
@@ -586,7 +586,7 @@ static inline SedsResult seds_router_queue(SedsRouter * router,
 {
     return seds_router_log_queue_typed(router,
                                        datatype,
-                                       (const void *) data,
+                                       static_cast<const void *>(data),
                                        count,
                                        seds_detail::elem_traits<T>::size,
                                        seds_detail::elem_traits<T>::kind,
@@ -597,10 +597,10 @@ static inline SedsResult seds_router_queue(SedsRouter * router,
  * @brief C++ convenience extractor that deduces element kind/size from @p T.
  */
 template<typename T>
-static inline SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count)
+static SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count)
 {
     return seds_pkt_get_typed(pkt,
-                              (void *) out,
+                              static_cast<void *>(out),
                               count,
                               seds_detail::elem_traits<T>::size,
                               seds_detail::elem_traits<T>::kind);

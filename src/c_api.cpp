@@ -16,6 +16,15 @@
 
 using namespace seds;
 
+// Dear programmer:
+// When I wrote this code, only god and I knew how it worked.
+// Now, only god knows it!
+// Therefore, if you are trying to optimize
+// this routine, and it fails (it most surely will),
+// please increase this counter as a warning for the next person:
+// total hours wasted on this project = 21
+
+
 // ----------------- internal wrappers / bridge -----------------
 
 // Opaque wrapper mirrors Rust #[repr(C)] struct holding Router
@@ -60,14 +69,14 @@ static int ok_or_status(const TelemetryResult<T> & r)
 // -------- enum conversions with bound checks (use non-template overloads) --------
 static TelemetryResult<DataType> dtype_from_u32(std::uint32_t x)
 {
-    auto o = try_enum_from_u32(x); // returns optional<DataType>
+    const auto o = try_enum_from_u32(x); // returns optional<DataType>
     if (!o) return TelemetryResult<DataType>::Err(TelemetryError::InvalidType());
     return TelemetryResult<DataType>::Ok(*o);
 }
 
 static TelemetryResult<DataEndpoint> endpoint_from_u32(std::uint32_t x)
 {
-    auto o = try_enum_from_u32_endpoint(x); // returns optional<DataEndpoint>
+    const auto o = try_enum_from_u32_endpoint(x); // returns optional<DataEndpoint>
     if (!o) return TelemetryResult<DataEndpoint>::Err(TelemetryError::Deserialize("bad endpoint"));
     return TelemetryResult<DataEndpoint>::Ok(*o);
 }
@@ -115,7 +124,7 @@ static bool is_valid_utf8(const std::uint8_t * s, std::size_t n)
 static std::optional<TelemetryPacket> view_to_packet(const SedsPacketView * view)
 {
     // ty
-    auto ty_opt = try_enum_from_u32(view->ty); // non-template (DataType)
+    const auto ty_opt = try_enum_from_u32(view->ty); // non-template (DataType)
     if (!ty_opt) return std::nullopt;
 
     // endpoints
@@ -130,7 +139,7 @@ static std::optional<TelemetryPacket> view_to_packet(const SedsPacketView * view
     }
 
     // sender
-    const char * sender_c = "";
+    const auto * sender_c = "";
     if (view->sender == nullptr)
     {
         if (view->sender_len != 0) return std::nullopt;
@@ -139,7 +148,7 @@ static std::optional<TelemetryPacket> view_to_packet(const SedsPacketView * view
     {
         auto * sb = reinterpret_cast<const std::uint8_t *>(view->sender);
         if (!is_valid_utf8(sb, view->sender_len)) return std::nullopt;
-        char * leaked = new char[view->sender_len + 1];
+        const auto leaked = new char[view->sender_len + 1];
         std::memcpy(leaked, sb, view->sender_len);
         leaked[view->sender_len] = '\0';
         sender_c = leaked; // leak (matches Rust Box::leak)
@@ -169,7 +178,7 @@ static std::optional<TelemetryPacket> view_to_packet(const SedsPacketView * view
 static int write_str_to_buf(const std::string & s, char * buf, std::size_t buf_len)
 {
     const std::size_t needed = s.size() + 1; // include NUL
-    if ((buf == nullptr && buf_len != 0))
+    if (buf == nullptr && buf_len != 0)
     {
         return status_from_err(TelemetryError::BadArg());
     }
@@ -188,12 +197,12 @@ static int write_str_to_buf(const std::string & s, char * buf, std::size_t buf_l
 }
 
 // -------- Clock bridge from C --------
-struct FfiClock : public Clock
+struct FfiClock final : Clock
 {
     CNowMs cb{};
     std::uintptr_t user_addr{0};
 
-    std::uint64_t now_ms() const override
+    [[nodiscard]] std::uint64_t now_ms() const override
     {
         if (cb) return cb(reinterpret_cast<void *>(user_addr));
         return 0; // same as Rust fallback (returned 0)
@@ -205,25 +214,25 @@ struct FfiClock : public Clock
 extern "C" int seds_pkt_header_string_len(const SedsPacketView * pkt)
 {
     if (!pkt) return status_from_err(TelemetryError::BadArg());
-    auto opt = view_to_packet(pkt);
+    const auto opt = view_to_packet(pkt);
     if (!opt) return status_from_err(TelemetryError::BadArg());
-    auto s = opt->HeaderString();
+    const auto s = opt->HeaderString();
     return static_cast<int>(s.size() + 1);
 }
 
 extern "C" int seds_pkt_to_string_len(const SedsPacketView * pkt)
 {
     if (!pkt) return status_from_err(TelemetryError::BadArg());
-    auto opt = view_to_packet(pkt);
+    const auto opt = view_to_packet(pkt);
     if (!opt) return status_from_err(TelemetryError::BadArg());
-    auto s = opt->ToString();
+    const auto s = opt->ToString();
     return static_cast<int>(s.size() + 1);
 }
 
 extern "C" int seds_pkt_header_string(const SedsPacketView * pkt, char * buf, std::size_t buf_len)
 {
     if (!pkt) return status_from_err(TelemetryError::BadArg());
-    auto opt = view_to_packet(pkt);
+    const auto opt = view_to_packet(pkt);
     if (!opt) return status_from_err(TelemetryError::BadArg());
     return write_str_to_buf(opt->HeaderString(), buf, buf_len);
 }
@@ -231,7 +240,7 @@ extern "C" int seds_pkt_header_string(const SedsPacketView * pkt, char * buf, st
 extern "C" int seds_pkt_to_string(const SedsPacketView * pkt, char * buf, std::size_t buf_len)
 {
     if (!pkt) return status_from_err(TelemetryError::BadArg());
-    auto opt = view_to_packet(pkt);
+    const auto opt = view_to_packet(pkt);
     if (!opt) return status_from_err(TelemetryError::BadArg());
     return write_str_to_buf(opt->ToString(), buf, buf_len);
 }
@@ -249,8 +258,8 @@ extern "C" SedsRouter * seds_router_new(CTransmit tx,
         auto ctx_user = tx_user;
         transmit = [tx, ctx_user](const std::vector<std::uint8_t> & bytes) -> TelemetryResult<void *>
         {
-            int code = tx(bytes.data(), bytes.size(), ctx_user);
-            if (code == 0) return TelemetryResult<void *>::Ok(nullptr);
+            if (const int code = tx(bytes.data(), bytes.size(), ctx_user); code == 0) return TelemetryResult<void
+                *>::Ok(nullptr);
             return TelemetryResult<void *>::Err(TelemetryError::Io("tx error"));
         };
     }
@@ -263,7 +272,7 @@ extern "C" SedsRouter * seds_router_new(CTransmit tx,
         {
             auto ep_res = endpoint_from_u32(handlers[i].endpoint);
             if (ep_res.is_err()) return nullptr;
-            DataEndpoint endpoint = ep_res.unwrap();
+            const DataEndpoint endpoint = ep_res.unwrap();
 
             auto cb = handlers[i].handler;
             auto usr = handlers[i].user;
@@ -280,7 +289,7 @@ extern "C" SedsRouter * seds_router_new(CTransmit tx,
                     for (auto e: *pkt.endpoints) eps_u32.push_back(static_cast<std::uint32_t>(e));
                 }
                 const char * sender = pkt.sender ? pkt.sender : "";
-                SedsPacketView view{
+                const SedsPacketView view{
                     static_cast<std::uint32_t>(pkt.ty),
                     pkt.data_size,
                     sender,
@@ -292,8 +301,7 @@ extern "C" SedsRouter * seds_router_new(CTransmit tx,
                     pkt.payload ? pkt.payload->size() : 0
                 };
 
-                int code = cb ? cb(&view, usr) : 0;
-                if (code == 0) return TelemetryResult<void *>::Ok(nullptr);
+                if (const int code = cb ? cb(&view, usr) : 0; code == 0) return TelemetryResult<void *>::Ok(nullptr);
                 return TelemetryResult<void *>::Err(TelemetryError::Io("handler error"));
             };
             v.push_back(std::move(eh));
@@ -318,8 +326,8 @@ extern "C" void seds_router_free(const SedsRouter * r)
 }
 
 // ---- logging (bytes/f32) ----
-extern "C" int seds_router_log_bytes(SedsRouter * r, std::uint32_t ty_u32,
-                                     const std::uint8_t * data, std::size_t len, std::uint64_t ts)
+extern "C" int seds_router_log_bytes(SedsRouter * r, const std::uint32_t ty_u32,
+                                     const std::uint8_t * data, const std::size_t len, const std::uint64_t ts)
 {
     if (!r || (len > 0 && !data)) return status_from_err(TelemetryError::BadArg());
     auto ty = dtype_from_u32(ty_u32);
@@ -329,13 +337,13 @@ extern "C" int seds_router_log_bytes(SedsRouter * r, std::uint32_t ty_u32,
     return ok_or_status(r->inner.log<std::uint8_t>(ty.unwrap(), v, ts));
 }
 
-extern "C" int seds_router_log_f32(SedsRouter * r, std::uint32_t ty_u32,
-                                   const float * vals, std::size_t n_vals, std::uint64_t ts)
+extern "C" int seds_router_log_f32(SedsRouter * r, const std::uint32_t ty_u32,
+                                   const float * vals, const std::size_t n_vals, const std::uint64_t ts)
 {
     if (!r || (n_vals > 0 && !vals)) return status_from_err(TelemetryError::BadArg());
     auto ty = dtype_from_u32(ty_u32);
     if (ty.is_err()) return status_from_err(ty.unwrap_err());
-    std::vector<float> v(vals, vals + n_vals);
+    const std::vector v(vals, vals + n_vals);
     return ok_or_status(r->inner.log<float>(ty.unwrap(), v, ts));
 }
 
@@ -343,14 +351,14 @@ extern "C" int seds_router_log_f32(SedsRouter * r, std::uint32_t ty_u32,
 extern "C" int seds_router_receive_serialized(SedsRouter * r, const std::uint8_t * bytes, std::size_t len)
 {
     if (!r || (len > 0 && !bytes)) return status_from_err(TelemetryError::BadArg());
-    std::vector<std::uint8_t> v(bytes, bytes + len);
+    const std::vector v(bytes, bytes + len);
     return ok_or_status(r->inner.receive_serialized(v));
 }
 
 extern "C" int seds_router_receive(SedsRouter * r, const SedsPacketView * view)
 {
     if (!r || !view) return status_from_err(TelemetryError::BadArg());
-    auto opt = view_to_packet(view);
+    const auto opt = view_to_packet(view);
     if (!opt) return status_from_err(TelemetryError::InvalidType());
     return ok_or_status(r->inner.receive(*opt));
 }
@@ -365,7 +373,7 @@ extern "C" int seds_router_process_send_queue(SedsRouter * r)
 extern "C" int seds_router_queue_tx_message(SedsRouter * r, const SedsPacketView * view)
 {
     if (!r || !view) return status_from_err(TelemetryError::BadArg());
-    auto opt = view_to_packet(view);
+    const auto opt = view_to_packet(view);
     if (!opt) return status_from_err(TelemetryError::InvalidType());
     return ok_or_status(r->inner.queue_tx_message(*opt)); // push pkt
 }
@@ -379,14 +387,14 @@ extern "C" int seds_router_process_received_queue(SedsRouter * r)
 extern "C" int seds_router_rx_serialized_packet_to_queue(SedsRouter * r, const std::uint8_t * bytes, std::size_t len)
 {
     if (!r || (len > 0 && !bytes)) return status_from_err(TelemetryError::BadArg());
-    std::vector<std::uint8_t> v(bytes, bytes + len);
+    const std::vector v(bytes, bytes + len);
     return ok_or_status(r->inner.rx_serialized_packet_to_queue(v));
 }
 
 extern "C" int seds_router_rx_packet_to_queue(SedsRouter * r, const SedsPacketView * view)
 {
     if (!r || !view) return status_from_err(TelemetryError::BadArg());
-    auto opt = view_to_packet(view);
+    const auto opt = view_to_packet(view);
     if (!opt) return status_from_err(TelemetryError::InvalidType());
     return ok_or_status(r->inner.rx_packet_to_queue(*opt));
 }
@@ -414,7 +422,7 @@ static int log_unaligned_slice_send(Router & router, DataType ty, const void * d
 {
     std::vector<T> tmp;
     tmp.reserve(count);
-    auto base = static_cast<const std::uint8_t *>(data);
+    const auto base = static_cast<const std::uint8_t *>(data);
     for (std::size_t i = 0; i < count; ++i)
     {
         const std::size_t esz = sizeof(T);
@@ -431,8 +439,7 @@ static int log_unaligned_slice_queue(Router & router, DataType ty, const void * 
                                      std::size_t count, std::uint64_t ts)
 {
     const auto & meta = message_meta(ty);
-    const std::size_t got = count * sizeof(T);
-    if (got != meta.data_size)
+    if (const std::size_t got = count * sizeof(T); got != meta.data_size)
     {
         return status_from_err(TelemetryError::SizeMismatch(meta.data_size, got));
     }

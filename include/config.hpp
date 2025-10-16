@@ -7,7 +7,7 @@
 namespace seds
 {
     // ---------------------- User Editable ----------------------
-    inline constexpr const char * DEVICE_IDENTIFIER = "TEST_PLATFORM";
+    inline constexpr auto DEVICE_IDENTIFIER = "TEST_PLATFORM";
 
     // Mirrors Rust #[repr(u32)]
     enum class DataEndpoint : std::uint32_t
@@ -34,7 +34,7 @@ namespace seds
         Error,
     };
 
-    inline constexpr const char * data_endpoint_as_str(DataEndpoint ep)
+    constexpr const char * data_endpoint_as_str(const DataEndpoint ep)
     {
         switch (ep)
         {
@@ -61,7 +61,7 @@ namespace seds
     // Rust has `pub const COUNT: usize = 6;`
     inline constexpr std::size_t DATA_TYPE_COUNT = 6;
 
-    inline constexpr const char * data_type_as_str(DataType dt)
+    constexpr const char * data_type_as_str(const DataType dt)
     {
         switch (dt)
         {
@@ -80,7 +80,7 @@ namespace seds
     inline constexpr std::size_t MAX_HEX_LENGTH = 1024;
 
     // Size per element for each MessageDataType (Rust const fn data_type_size)
-    inline constexpr std::size_t data_type_size(MessageDataType dt)
+    constexpr std::size_t data_type_size(const MessageDataType dt)
     {
         switch (dt)
         {

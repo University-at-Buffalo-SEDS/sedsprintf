@@ -19,7 +19,7 @@ namespace seds
     inline constexpr std::size_t ENDPOINT_ELEM_SIZE = sizeof(std::uint32_t);
     inline constexpr std::size_t SENDER_LEN_SIZE = sizeof(std::uint32_t);
 
-    inline constexpr std::size_t header_size_bytes()
+    constexpr std::size_t header_size_bytes()
     {
         return TYPE_SIZE + DATA_SIZE_SIZE + SENDER_LEN_SIZE + TIME_SIZE + NUM_ENDPOINTS_SIZE;
     }
@@ -34,7 +34,7 @@ namespace seds
     class ByteReader
     {
     public:
-        ByteReader(const std::uint8_t * buf, std::size_t len) : buf_(buf), len_(len), off_(0)
+        ByteReader(const std::uint8_t * buf, const std::size_t len) : buf_(buf), len_(len)
         {
         }
 
@@ -63,7 +63,7 @@ namespace seds
 
         std::optional<std::uint32_t> read_u32(const char ** err)
         {
-            auto p = read_bytes(4, err);
+            const auto p = read_bytes(4, err);
             if (!p) return std::nullopt;
             const std::uint8_t * b = *p;
             std::uint32_t v =
@@ -76,7 +76,7 @@ namespace seds
 
         std::optional<std::uint64_t> read_u64(const char ** err)
         {
-            auto p = read_bytes(8, err);
+            const auto p = read_bytes(8, err);
             if (!p) return std::nullopt;
             const std::uint8_t * b = *p;
             std::uint64_t v =

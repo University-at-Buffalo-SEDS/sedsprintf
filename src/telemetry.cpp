@@ -9,40 +9,40 @@ namespace seds
     // ---------------------- TelemetryPacket impl ----------------------
 
     TelemetryResult<TelemetryPacket> TelemetryPacket::New(
-        DataType ty,
-        const std::vector<DataEndpoint> & eps,
-        const char * sender_in,
-        std::uint64_t ts,
-        std::shared_ptr<const std::vector<std::uint8_t>> payload_in)
+        const DataType ty,
+        const std::vector<DataEndpoint> & endpoints,
+        const char * sender,
+        const std::uint64_t timestamp,
+        std::shared_ptr<const std::vector<std::uint8_t>> payload)
     {
         const auto & meta = message_meta(ty);
-        if (eps.empty())
+        if (endpoints.empty())
         {
             return TelemetryResult<TelemetryPacket>::Err(TelemetryError::EmptyEndpoints());
         }
-        if (!payload_in || payload_in->size() != meta.data_size)
+        if (!payload || payload->size() != meta.data_size)
         {
-            const std::size_t got = payload_in ? payload_in->size() : 0;
+            const std::size_t got = payload ? payload->size() : 0;
             return TelemetryResult<TelemetryPacket>::Err(
                 TelemetryError::SizeMismatch(meta.data_size, got));
         }
 
-        auto endpoints_arc = std::make_shared<const std::vector<DataEndpoint>>(eps);
+        auto endpoints_arc = std::make_shared<const std::vector<DataEndpoint>>(endpoints);
         TelemetryPacket pkt;
         pkt.ty = ty;
         pkt.data_size = meta.data_size;
-        pkt.sender = sender_in;
+        pkt.sender = sender;
         pkt.endpoints = std::move(endpoints_arc);
-        pkt.timestamp = ts;
-        pkt.payload = std::move(payload_in);
+        pkt.timestamp = timestamp;
+        pkt.payload = std::move(payload);
         return TelemetryResult<TelemetryPacket>::Ok(std::move(pkt));
     }
 
     TelemetryResult<TelemetryPacket> TelemetryPacket::FromU8Slice(
-        DataType ty,
+        const DataType ty,
         const std::vector<std::uint8_t> & bytes,
-        const std::vector<DataEndpoint> & eps,
-        std::uint64_t ts)
+        const std::vector<DataEndpoint> & endpoints,
+        std::uint64_t timestamp)
     {
         const auto & meta = message_meta(ty);
         if (bytes.size() != meta.data_size)
@@ -51,14 +51,14 @@ namespace seds
                 TelemetryError::SizeMismatch(meta.data_size, bytes.size()));
         }
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(bytes);
-        return TelemetryPacket::New(ty, eps, DEVICE_IDENTIFIER, ts, std::move(payload_arc));
+        return New(ty, endpoints, DEVICE_IDENTIFIER, timestamp, std::move(payload_arc));
     }
 
     TelemetryResult<TelemetryPacket> TelemetryPacket::FromF32Slice(
-        DataType ty,
+        const DataType ty,
         const std::vector<float> & values,
-        const std::vector<DataEndpoint> & eps,
-        std::uint64_t ts)
+        const std::vector<DataEndpoint> & endpoints,
+        const std::uint64_t timestamp)
     {
         const auto & meta = message_meta(ty);
         const std::size_t need = values.size() * 4;
@@ -85,7 +85,7 @@ namespace seds
             bytes.insert(bytes.end(), out, out + 4);
         }
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(bytes));
-        return TelemetryPacket::New(ty, eps, DEVICE_IDENTIFIER, ts, std::move(payload_arc));
+        return TelemetryPacket::New(ty, endpoints, DEVICE_IDENTIFIER, timestamp, std::move(payload_arc));
     }
 
     TelemetryResult<void *> TelemetryPacket::Validate() const
@@ -155,7 +155,7 @@ namespace seds
                 break;
             }
         }
-        return TrimmedStr(std::vector(bytes.begin(), bytes.begin() + end));
+        return TrimmedStr(std::vector(bytes.begin(), bytes.begin() + static_cast<const unsigned char>(end)));
     }
 
     std::optional<std::string> TelemetryPacket::TrimmedStr(const std::vector<std::uint8_t> & bytes)
@@ -210,7 +210,7 @@ namespace seds
                 }
                 std::ostringstream oss;
                 oss.setf(std::ios::fixed, std::ios::floatfield);
-                oss << std::setprecision(static_cast<int>(MAX_PRECISION));
+                oss << std::setprecision(MAX_PRECISION);
                 const std::size_t n = bytes.size() / 4;
                 for (std::size_t i = 0; i < n; ++i)
                 {
@@ -279,7 +279,7 @@ namespace seds
         if (payload && !payload->empty())
         {
             hex.reserve(payload->size() * 5); // " 0x??"
-            for (uint8_t b: *payload)
+            for (const uint8_t b: *payload)
             {
                 char buf[6]; // " 0x" + 2 hex + '\0'
                 std::snprintf(buf, sizeof(buf), " 0x%02x", static_cast<unsigned>(b));

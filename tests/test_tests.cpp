@@ -19,7 +19,7 @@
 using namespace seds;
 
 // ---------------- Mock clock ----------------
-class StepClock : public Clock {
+class StepClock final : public Clock {
 public:
     static std::unique_ptr<Clock> NewBox(uint64_t start, uint64_t step) {
         return std::unique_ptr<Clock>(new StepClock(start, step));
@@ -31,7 +31,7 @@ public:
     StepClock(uint64_t start, uint64_t step) : t_(start), step_(step) {}
     uint64_t now_ms() const override {
         // returns current, then advances by step
-        auto cur = t_.load(std::memory_order_relaxed);
+        const auto cur = t_.load(std::memory_order_relaxed);
         t_.store(cur + step_, std::memory_order_relaxed);
         return cur;
     }
@@ -57,7 +57,7 @@ static TelemetryPacket MakeGpsPacketFromF32s(const std::vector<float>& vals,
         bytes.push_back(static_cast<uint8_t>((u >> 16) & 0xFFu));
         bytes.push_back(static_cast<uint8_t>((u >> 24) & 0xFFu));
     }
-    auto payload_arc = std::make_shared<const std::vector<uint8_t>>(std::move(bytes));
+    const auto payload_arc = std::make_shared<const std::vector<uint8_t>>(std::move(bytes));
     TelemetryResult<TelemetryPacket> r =
         TelemetryPacket::New(DataType::GpsData, eps, sender, ts, payload_arc);
     EXPECT_TRUE(r.is_ok()) << "failed to build GPS packet";
@@ -113,7 +113,7 @@ TEST(Serialize, RoundtripGps) {
 }
 
 TEST(Formatting, HeaderStringMatchesExpectation) {
-    std::vector<DataEndpoint> endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
+    const std::vector endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
     const auto pkt = MakeGpsPacketFromF32s({1.0f, 2.0f, 3.0f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
     const auto s = pkt.HeaderString();
     EXPECT_EQ(s,
@@ -121,7 +121,7 @@ TEST(Formatting, HeaderStringMatchesExpectation) {
 }
 
 TEST(Formatting, PacketToStringFormatsFloats) {
-    std::vector<DataEndpoint> endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
+    const std::vector endpoints{DataEndpoint::SdCard, DataEndpoint::Radio};
     const auto pkt = MakeGpsPacketFromF32s({1.0f, 2.5f, 3.25f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
     auto text = pkt.ToString();
     ASSERT_TRUE(text.rfind(
@@ -405,7 +405,7 @@ TEST(Timeouts, ProcessAllQueuesHandlesU64Wraparound) {
 TEST(Helpers, PacketHexToString) {
     // Builds the exact string checked in the Rust port; here we assert our C++ Hex formatter matches.
     // If your TelemetryPacket exposes ToHexString(), use it. Otherwise, use ToString() if it prints hex in the same form.
-    auto pkt = FakeTelemetryPacketBytes();
+    const auto pkt = FakeTelemetryPacketBytes();
 
     // Prefer ToHexString() if available; otherwise fall back to ToString() (kept for compatibility).
     std::string got;
@@ -415,7 +415,7 @@ TEST(Helpers, PacketHexToString) {
     got = pkt.ToHexString(); // your codebase already had this test in C++, per the Rust comments
 #endif
 
-    const char* expect =
+    const auto expect =
         "Type: GPS_DATA, Size: 12, Sender: Flight Controller, Endpoints: [SD_CARD, RADIO], "
         "Timestamp: 1123581321, Data (hex): 0x00 0x00 0x98 0x41 0x00 0x00 0x04 0x42 0x00 0x00 0x50 0x42";
     EXPECT_EQ(got, expect);

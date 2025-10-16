@@ -27,10 +27,10 @@ namespace seds
         [[nodiscard]] bool is_ok() const { return ok_; }
         [[nodiscard]] bool is_err() const { return !ok_; }
 
-        const T & unwrap() const { return value_; }
+        [[nodiscard]] const T & unwrap() const { return value_; }
         T & unwrap() { return value_; }
 
-        const E & unwrap_err() const { return error_; }
+        [[nodiscard]] const E & unwrap_err() const { return error_; }
         E & unwrap_err() { return error_; }
 
     private:

@@ -433,7 +433,7 @@ TEST(Timeouts, ProcessAllQueuesHandlesU64Wraparound)
         return TelemetryResult<void *>::Ok(nullptr);
     };
 
-    Router r(std::optional(tx),
+    Router r(std::make_optional(tx),
              BoardConfig(std::vector{handler}),
              StepClock::NewBox(std::numeric_limits<uint64_t>::max() - 1, /*step=*/2));
 

@@ -206,7 +206,7 @@ TEST(Router, SendsAndReceives)
                      StepClock::NewDefaultBox());
 
     // send GPS_DATA (3 * f32) using Router::log (uses default endpoints from schema)
-    std::vector data{1.0f, 2.0f, 3.0f};
+    std::vector<float> data{1.0f, 2.0f, 3.0f};
     ASSERT_TRUE(router.log<float>(DataType::GpsData, data, 0).is_ok());
 
     // --- assertions ---
@@ -355,14 +355,14 @@ TEST(Timeouts, ProcessAllQueuesTimeoutZeroDrainsFully)
         return TelemetryResult<void *>::Ok(nullptr);
     };
 
-    Router r(std::optional(tx),
+    Router r(std::optional<Router::TransmitFn>(tx),
              BoardConfig(std::vector{handler}),
              StepClock::NewDefaultBox());
 
     // Enqueue TX (3)
     for (int i = 0; i < 3; ++i)
     {
-        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector{1.0f, 2.0f, 3.0f}, 0).is_ok());
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
     }
     // Enqueue RX (2) with only-local endpoint
     for (int i = 0; i < 2; ++i)
@@ -394,7 +394,7 @@ TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget)
     };
 
     Router r(std::optional<Router::TransmitFn>(tx),
-             BoardConfig(std::vector{handler}),
+             BoardConfig(std::vector<EndpointHandler>{handler}),
              StepClock::NewBox(/*start=*/0, /*step=*/10));
 
     // Seed work in both queues (5 of each)

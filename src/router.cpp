@@ -92,7 +92,10 @@ namespace seds
                 if (auto r = send(pkt); r.is_err()) return r;
                 did_any = true;
             }
-
+            if (!drain_fully && (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)))
+            {
+                break;
+            }
             if (!received_queue_.empty())
             {
                 RxQueueItem it = std::move(received_queue_.back());
@@ -100,12 +103,12 @@ namespace seds
                 if (auto r = handle_rx_queue_item(std::move(it)); r.is_err()) return r;
                 did_any = true;
             }
-
-            if (!did_any) break;
             if (!drain_fully && (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)))
             {
                 break;
             }
+            if (!did_any) break;
+
         }
 
         return TelemetryResult<void *>::Ok(nullptr);

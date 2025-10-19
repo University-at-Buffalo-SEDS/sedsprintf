@@ -47,12 +47,12 @@ typedef enum SedsDataEndpoint
  */
 typedef enum
 {
-    SEDS_OK = 0,             /**< Success. */
-    SEDS_ERR = -1,           /**< Unspecified error. */
-    SEDS_BAD_ARG = -2,       /**< One or more arguments are invalid (NULL/size mismatch/etc). */
-    SEDS_INVALID_TYPE = -3,  /**< Unsupported/unknown type or endpoint value. */
+    SEDS_OK = 0, /**< Success. */
+    SEDS_ERR = -1, /**< Unspecified error. */
+    SEDS_BAD_ARG = -2, /**< One or more arguments are invalid (NULL/size mismatch/etc). */
+    SEDS_INVALID_TYPE = -3, /**< Unsupported/unknown type or endpoint value. */
     SEDS_SIZE_MISMATCH = -4, /**< Element/byte length does not match schema requirement. */
-    SEDS_DESERIALIZE = -5,   /**< Failed to deserialize a packet from bytes. */
+    SEDS_DESERIALIZE = -5, /**< Failed to deserialize a packet from bytes. */
     SEDS_HANDLER_ERROR = -6, /**< A user-provided endpoint handler returned an error. */
 } SedsResult;
 
@@ -77,18 +77,18 @@ typedef struct SedsRouter SedsRouter;
  */
 typedef struct SedsPacketView
 {
-    uint32_t ty;             /**< DataType as u32. */
-    size_t   data_size;      /**< Payload size in bytes. */
+    uint32_t ty; /**< DataType as u32. */
+    size_t data_size; /**< Payload size in bytes. */
 
     /* Rust `&str` is (ptr,len). Not NUL-terminated. Lifetime = callback. */
-    const char * sender;     /**< UTF-8 bytes; may not be NUL-terminated. */
-    size_t       sender_len; /**< Number of bytes at `sender`. */
+    const char * sender; /**< UTF-8 bytes; may not be NUL-terminated. */
+    size_t sender_len; /**< Number of bytes at `sender`. */
 
     const uint32_t * endpoints; /**< Array of DataEndpoint (as u32). */
-    size_t          num_endpoints;
-    uint64_t        timestamp;  /**< Timestamp units as defined by your system. */
-    const uint8_t * payload;    /**< Raw payload bytes. */
-    size_t          payload_len;/**< == data_size. */
+    size_t num_endpoints;
+    uint64_t timestamp; /**< Timestamp units as defined by your system. */
+    const uint8_t * payload; /**< Raw payload bytes. */
+    size_t payload_len; /**< == data_size. */
 } SedsPacketView;
 
 
@@ -98,6 +98,7 @@ typedef enum SedsElemKind
     SEDS_EK_SIGNED = 1, /**< i8/i16/i32/i64/... */
     SEDS_EK_FLOAT = 2 /**< f32/f64 */
 } SedsElemKind;
+
 /**
  * @brief Transmit callback.
  *
@@ -126,9 +127,9 @@ typedef SedsResult (* SedsEndpointHandlerFn)(const SedsPacketView * pkt, void * 
  */
 typedef struct SedsLocalEndpointDesc
 {
-    uint32_t              endpoint; /**< DataEndpoint as u32. */
-    SedsEndpointHandlerFn handler;  /**< Callback function. */
-    void *                user;     /**< Opaque user context passed to callback. */
+    uint32_t endpoint; /**< DataEndpoint as u32. */
+    SedsEndpointHandlerFn handler; /**< Callback function. */
+    void * user; /**< Opaque user context passed to callback. */
 } SedsLocalEndpointDesc;
 
 /**
@@ -507,6 +508,36 @@ SedsResult seds_router_clear_tx_queue(SedsRouter * r);
 SedsResult seds_pkt_get_f32(const SedsPacketView * pkt, float * out, size_t n);
 
 /**
+ * @brief Get a direct pointer to the raw payload bytes.
+ *
+ * @param pkt     Packet view (must not be NULL).
+ * @param out_len Optional; if non-NULL, receives the payload length in bytes.
+ * @return Pointer to the payload bytes, or NULL on error.
+ *
+ * @warning The returned pointer is only valid for the lifetime of @p pkt (i.e., during the
+ *          callback that provided the view). Do not retain it after the callback returns.
+ */
+const void * seds_pkt_bytes_ptr(const SedsPacketView * pkt, size_t * out_len);
+
+/**
+ * @brief Get a direct pointer to the payload, validated as an array of fixed-size elements.
+ *
+ * Validates that @p elem_size is one of {1,2,4,8} and that payload_len is an exact multiple
+ * of @p elem_size. If validation passes, returns the same underlying pointer as
+ * @ref seds_pkt_bytes_ptr and (optionally) the element count.
+ *
+ * @param pkt        Packet view (must not be NULL).
+ * @param elem_size  Element size in bytes (must be 1, 2, 4, or 8).
+ * @param out_count  Optional; if non-NULL, receives payload_len / elem_size on success (0 on fail).
+ * @return Pointer to the payload bytes, or NULL if arguments are invalid or sizes don’t divide evenly.
+ *
+ * @note No endianness conversion is performed. If interpreting multi-byte scalars on a
+ *       big-endian host, convert from little-endian after casting.
+ * @warning The returned pointer is only valid for the lifetime of @p pkt (see warning above).
+ */
+const void * seds_pkt_data_ptr(const SedsPacketView * pkt, size_t elem_size, size_t * out_count);
+
+/**
  * @brief Extract a typed slice from @p pkt into @p out.
  *
  * @param pkt       Packet view.
@@ -538,28 +569,85 @@ SedsResult seds_pkt_get_typed(const SedsPacketView * pkt,
 
 namespace seds_detail
 {
-    template < typename T >
+    template<typename T>
     struct elem_traits;
 
-    template<> struct elem_traits<uint8_t>  { static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED; static constexpr size_t size = 1; };
-    template<> struct elem_traits<uint16_t> { static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED; static constexpr size_t size = 2; };
-    template<> struct elem_traits<uint32_t> { static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED; static constexpr size_t size = 4; };
-    template<> struct elem_traits<uint64_t> { static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED; static constexpr size_t size = 8; };
+    template<>
+    struct elem_traits<uint8_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED;
+        static constexpr size_t size = 1;
+    };
 
-    template<> struct elem_traits<int8_t>   { static constexpr SedsElemKind kind = SEDS_EK_SIGNED;   static constexpr size_t size = 1; };
-    template<> struct elem_traits<int16_t>  { static constexpr SedsElemKind kind = SEDS_EK_SIGNED;   static constexpr size_t size = 2; };
-    template<> struct elem_traits<int32_t>  { static constexpr SedsElemKind kind = SEDS_EK_SIGNED;   static constexpr size_t size = 4; };
-    template<> struct elem_traits<int64_t>  { static constexpr SedsElemKind kind = SEDS_EK_SIGNED;   static constexpr size_t size = 8; };
+    template<>
+    struct elem_traits<uint16_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED;
+        static constexpr size_t size = 2;
+    };
 
-    template<> struct elem_traits<float>    { static constexpr SedsElemKind kind = SEDS_EK_FLOAT;    static constexpr size_t size = 4; };
-    template<> struct elem_traits<double>   { static constexpr SedsElemKind kind = SEDS_EK_FLOAT;    static constexpr size_t size = 8; };
+    template<>
+    struct elem_traits<uint32_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED;
+        static constexpr size_t size = 4;
+    };
+
+    template<>
+    struct elem_traits<uint64_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_UNSIGNED;
+        static constexpr size_t size = 8;
+    };
+
+    template<>
+    struct elem_traits<int8_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_SIGNED;
+        static constexpr size_t size = 1;
+    };
+
+    template<>
+    struct elem_traits<int16_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_SIGNED;
+        static constexpr size_t size = 2;
+    };
+
+    template<>
+    struct elem_traits<int32_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_SIGNED;
+        static constexpr size_t size = 4;
+    };
+
+    template<>
+    struct elem_traits<int64_t>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_SIGNED;
+        static constexpr size_t size = 8;
+    };
+
+    template<>
+    struct elem_traits<float>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_FLOAT;
+        static constexpr size_t size = 4;
+    };
+
+    template<>
+    struct elem_traits<double>
+    {
+        static constexpr SedsElemKind kind = SEDS_EK_FLOAT;
+        static constexpr size_t size = 8;
+    };
 }
 
 /**
  * @brief C++ convenience wrapper that deduces element kind/size from @p T and logs immediately.
  */
 template<typename T>
-static SedsResult seds_router(SedsRouter * router,
+static inline SedsResult seds_router(SedsRouter * router,
                                      SedsDataType datatype,
                                      const T * data,
                                      size_t count,
@@ -567,7 +655,7 @@ static SedsResult seds_router(SedsRouter * router,
 {
     return seds_router_log_typed(router,
                                  datatype,
-                                 static_cast<const void *>(data),
+                                 (const void *) data,
                                  count,
                                  seds_detail::elem_traits<T>::size,
                                  seds_detail::elem_traits<T>::kind,
@@ -578,7 +666,7 @@ static SedsResult seds_router(SedsRouter * router,
  * @brief C++ convenience wrapper that deduces element kind/size from @p T and queues the log.
  */
 template<typename T>
-static SedsResult seds_router_queue(SedsRouter * router,
+static inline SedsResult seds_router_queue(SedsRouter * router,
                                            SedsDataType datatype,
                                            const T * data,
                                            size_t count,
@@ -586,7 +674,7 @@ static SedsResult seds_router_queue(SedsRouter * router,
 {
     return seds_router_log_queue_typed(router,
                                        datatype,
-                                       static_cast<const void *>(data),
+                                       (const void *) data,
                                        count,
                                        seds_detail::elem_traits<T>::size,
                                        seds_detail::elem_traits<T>::kind,
@@ -597,10 +685,10 @@ static SedsResult seds_router_queue(SedsRouter * router,
  * @brief C++ convenience extractor that deduces element kind/size from @p T.
  */
 template<typename T>
-static SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count)
+static inline SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count)
 {
     return seds_pkt_get_typed(pkt,
-                              static_cast<void *>(out),
+                              (void *) out,
                               count,
                               seds_detail::elem_traits<T>::size,
                               seds_detail::elem_traits<T>::kind);

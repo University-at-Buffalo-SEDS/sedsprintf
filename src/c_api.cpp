@@ -174,6 +174,53 @@ static std::optional<TelemetryPacket> view_to_packet(const SedsPacketView * view
     return pkt;
 }
 
+extern "C" const void * seds_pkt_bytes_ptr(const SedsPacketView * pkt, std::size_t * out_len)
+{
+    if (!pkt)
+    {
+        if (out_len) *out_len = 0;
+        return nullptr;
+    }
+    // If the view claims bytes exist, the pointer must be non-null.
+    if (pkt->payload_len > 0 && pkt->payload == nullptr)
+    {
+        if (out_len) *out_len = 0;
+        return nullptr;
+    }
+    if (out_len) *out_len = pkt->payload_len;
+    return reinterpret_cast<const void *>(pkt->payload);
+}
+
+extern "C" const void * seds_pkt_data_ptr(const SedsPacketView * pkt, std::size_t elem_size, std::size_t * out_count)
+{
+    if (out_count) *out_count = 0;
+
+    if (!pkt) return nullptr;
+    // If bytes are claimed, pointer must be valid.
+    if (pkt->payload_len > 0 && pkt->payload == nullptr) return nullptr;
+
+    // Only allow 1,2,4,8 (keeps parity with Rust helper and your typed paths)
+    switch (elem_size)
+    {
+        case 1:
+        case 2:
+        case 4:
+        case 8:
+            break;
+        default:
+            return nullptr;
+    }
+
+    // Length must divide evenly by elem_size
+    if (elem_size == 0 || (pkt->payload_len % elem_size) != 0)
+    {
+        return nullptr;
+    }
+
+    if (out_count) *out_count = pkt->payload_len / elem_size;
+    return reinterpret_cast<const void *>(pkt->payload);
+}
+
 // ---- string write helper ----
 static int write_str_to_buf(const std::string & s, char * buf, std::size_t buf_len)
 {
@@ -258,8 +305,9 @@ extern "C" SedsRouter * seds_router_new(CTransmit tx,
         auto ctx_user = tx_user;
         transmit = [tx, ctx_user](const std::vector<std::uint8_t> & bytes) -> TelemetryResult<void *>
         {
-            if (const int code = tx(bytes.data(), bytes.size(), ctx_user); code == 0) return TelemetryResult<void
-                *>::Ok(nullptr);
+            if (const int code = tx(bytes.data(), bytes.size(), ctx_user); code == 0)
+                return TelemetryResult<void
+                    *>::Ok(nullptr);
             return TelemetryResult<void *>::Err(TelemetryError::Io("tx error"));
         };
     }

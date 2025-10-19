@@ -379,7 +379,7 @@ TEST(Timeouts, ProcessAllQueuesTimeoutZeroDrainsFully)
     EXPECT_EQ(rx_count->load(std::memory_order_seq_cst), 5u);
 }
 
-TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget)
+TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget_one_receive_one_send)
 {
     auto tx_count = std::make_shared<std::atomic<size_t> >(0);
     auto tx = TxCounter(tx_count);
@@ -406,6 +406,47 @@ TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget)
 
     // Step is 10ms per call; timeout 5ms guarantees exactly one iteration
     ASSERT_TRUE(r.process_all_queues_with_timeout(5).is_ok());
+
+    // One iteration → at most one TX send
+    EXPECT_EQ(tx_count->load(std::memory_order_seq_cst), 1u);
+
+    // Handlers run for both TX local delivery and RX processing → 2 total
+    EXPECT_EQ(rx_count->load(std::memory_order_seq_cst), 1u);
+
+    // Drain the rest to prove there was more work left
+    ASSERT_TRUE(r.process_all_queues_with_timeout(0).is_ok());
+    EXPECT_EQ(tx_count->load(std::memory_order_seq_cst), 5u);
+    EXPECT_EQ(rx_count->load(std::memory_order_seq_cst), 10u); // 5 (TX locals) + 5 (RX)
+}
+
+
+TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget_two_receive_one_send)
+{
+    auto tx_count = std::make_shared<std::atomic<size_t> >(0);
+    auto tx = TxCounter(tx_count);
+
+    auto rx_count = std::make_shared<std::atomic<size_t> >(0);
+    EndpointHandler handler;
+    handler.endpoint = DataEndpoint::SdCard;
+    handler.handler = [rx_count](const TelemetryPacket &) -> TelemetryResult<void *>
+    {
+        rx_count->fetch_add(1, std::memory_order_seq_cst);
+        return TelemetryResult<void *>::Ok(nullptr);
+    };
+
+    Router r(std::optional<Router::TransmitFn>(tx),
+             BoardConfig(std::vector<EndpointHandler>{handler}),
+             StepClock::NewBox(/*start=*/0, /*step=*/5));
+
+    // Seed work in both queues (5 of each)
+    for (int i = 0; i < 5; ++i)
+    {
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
+        ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({4.0f, 5.0f, 6.0f}, 1)).is_ok());
+    }
+
+    // Step is 10ms per call; timeout 5ms guarantees exactly one iteration
+    ASSERT_TRUE(r.process_all_queues_with_timeout(10).is_ok());
 
     // One iteration → at most one TX send
     EXPECT_EQ(tx_count->load(std::memory_order_seq_cst), 1u);

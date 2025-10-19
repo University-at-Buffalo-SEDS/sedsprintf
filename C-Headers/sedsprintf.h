@@ -423,6 +423,9 @@ SedsResult seds_router_rx_packet_to_queue(SedsRouter * r,
  *         otherwise a negative @ref SedsResult (e.g., callback error).
  *
  * @note Time measurement uses the router’s @ref SedsNowMsFn.
+ * @note Timeout is not guaranteed to exit at the timeout specified, function will return as soon as the current action
+ * has finished after the timeout has elapsed. An example is if the current action takes 50ms but the timeout is 5ms,
+ * one item will be handled in 50ms and the function will return leaving any other items to be handled later.
  */
 SedsResult seds_router_process_tx_queue_with_timeout(
     SedsRouter * r,
@@ -435,6 +438,9 @@ SedsResult seds_router_process_tx_queue_with_timeout(
  * @param r           Router handle.
  * @param timeout_ms  Maximum processing time in milliseconds.
  * @return SEDS_OK on success; a negative @ref SedsResult if a handler fails.
+ * @note Timeout is not guaranteed to exit at the timeout specified, function will return as soon as the current action
+ * has finished after the timeout has elapsed. An example is if the current action takes 50ms but the timeout is 5ms,
+ * one item will be handled in 50ms and the function will return leaving any other items to be handled later.
  */
 SedsResult seds_router_process_rx_queue_with_timeout(
     SedsRouter * r,
@@ -447,6 +453,9 @@ SedsResult seds_router_process_rx_queue_with_timeout(
  * @param r           Router handle.
  * @param timeout_ms  Maximum processing time in milliseconds.
  * @return SEDS_OK on success; otherwise a negative @ref SedsResult.
+ * @note Timeout is not guaranteed to exit at the timeout specified, function will return as soon as the current action
+ * has finished after the timeout has elapsed. An example is if the current action takes 50ms but the timeout is 5ms,
+ * one item will be handled in 50ms and the function will return leaving any other items to be handled later.
  */
 SedsResult seds_router_process_all_queues_with_timeout(
     SedsRouter * r,
@@ -647,15 +656,15 @@ namespace seds_detail
  * @brief C++ convenience wrapper that deduces element kind/size from @p T and logs immediately.
  */
 template<typename T>
-static inline SedsResult seds_router(SedsRouter * router,
-                                     SedsDataType datatype,
-                                     const T * data,
-                                     size_t count,
-                                     uint64_t timestamp)
+static SedsResult seds_router(SedsRouter * router,
+                              SedsDataType datatype,
+                              const T * data,
+                              size_t count,
+                              uint64_t timestamp)
 {
     return seds_router_log_typed(router,
                                  datatype,
-                                 (const void *) data,
+                                 static_cast<const void *>(data),
                                  count,
                                  seds_detail::elem_traits<T>::size,
                                  seds_detail::elem_traits<T>::kind,
@@ -666,15 +675,15 @@ static inline SedsResult seds_router(SedsRouter * router,
  * @brief C++ convenience wrapper that deduces element kind/size from @p T and queues the log.
  */
 template<typename T>
-static inline SedsResult seds_router_queue(SedsRouter * router,
-                                           SedsDataType datatype,
-                                           const T * data,
-                                           size_t count,
-                                           uint64_t timestamp)
+static SedsResult seds_router_queue(SedsRouter * router,
+                                    SedsDataType datatype,
+                                    const T * data,
+                                    size_t count,
+                                    uint64_t timestamp)
 {
     return seds_router_log_queue_typed(router,
                                        datatype,
-                                       (const void *) data,
+                                       static_cast<const void *>(data),
                                        count,
                                        seds_detail::elem_traits<T>::size,
                                        seds_detail::elem_traits<T>::kind,
@@ -685,10 +694,10 @@ static inline SedsResult seds_router_queue(SedsRouter * router,
  * @brief C++ convenience extractor that deduces element kind/size from @p T.
  */
 template<typename T>
-static inline SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count)
+static SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count)
 {
     return seds_pkt_get_typed(pkt,
-                              (void *) out,
+                              static_cast<void *>(out),
                               count,
                               seds_detail::elem_traits<T>::size,
                               seds_detail::elem_traits<T>::kind);

@@ -122,19 +122,34 @@ namespace seds
         std::string endpoints_s;
         BuildEndpointString(endpoints_s);
 
-        std::string s;
-        s.reserve(96);
-        s += "Type: ";
-        s += data_type_as_str(ty);
-        s += ", Size: ";
-        s += std::to_string(data_size);
-        s += ", Sender: ";
-        s += (sender ? sender : "");
-        s += ", Endpoints: [";
-        s += endpoints_s;
-        s += "], Timestamp: ";
-        s += std::to_string(timestamp);
-        return s;
+        // convert timestamp (ms since boot) into human-readable format
+        const uint64_t total_ms = timestamp;
+        const uint64_t hours = total_ms / 3'600'000ULL;
+        const uint64_t minutes = (total_ms % 3'600'000ULL) / 60'000ULL;
+        const uint64_t seconds = (total_ms % 60'000ULL) / 1'000ULL;
+        const uint64_t milliseconds = total_ms % 1'000ULL;
+
+        std::ostringstream human_time;
+        if (hours > 0)
+            human_time << hours << "h " << std::setw(2) << std::setfill('0')
+                    << minutes << "m " << std::setw(2) << seconds << "s "
+                    << std::setw(3) << milliseconds << "ms";
+        else if (minutes > 0)
+            human_time << minutes << "m " << std::setw(2) << std::setfill('0')
+                    << seconds << "s " << std::setw(3) << milliseconds << "ms";
+        else
+            human_time << seconds << "s " << std::setw(3) << milliseconds << "ms";
+
+        // build the full header string
+        std::ostringstream out;
+        out << "Type: " << data_type_as_str(ty)
+                << ", Size: " << data_size
+                << ", Sender: " << (sender ? sender : "")
+                << ", Endpoints: [" << endpoints_s << "]"
+                << ", Timestamp: " << timestamp
+                << " (" << human_time.str() << ")";
+
+        return out.str();
     }
 
     std::optional<std::string> TelemetryPacket::DataAsUtf8() const
@@ -172,7 +187,6 @@ namespace seds
 
     std::string TelemetryPacket::ToString() const
     {
-        constexpr std::size_t MAX_PRECISION = 12;
         std::string s = HeaderString();
 
         if (!payload || payload->empty())
@@ -202,6 +216,7 @@ namespace seds
         {
             case MessageDataType::Float32:
             {
+                constexpr std::size_t MAX_PRECISION = 12;
                 const auto & bytes = *payload;
                 if (bytes.size() % 4 != 0)
                 {

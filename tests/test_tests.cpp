@@ -141,7 +141,7 @@ TEST(Formatting, HeaderStringMatchesExpectation)
     const auto pkt = MakeGpsPacketFromF32s({1.0f, 2.0f, 3.0f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
     const auto s = pkt.HeaderString();
     EXPECT_EQ(s,
-              "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0");
+              "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0 (0s   0ms)");
 }
 
 TEST(Formatting, PacketToStringFormatsFloats)
@@ -150,7 +150,7 @@ TEST(Formatting, PacketToStringFormatsFloats)
     const auto pkt = MakeGpsPacketFromF32s({1.0f, 2.5f, 3.25f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
     auto text = pkt.ToString();
     ASSERT_TRUE(text.rfind(
-        "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0, Data: ",
+        "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0 (0s   0ms), Data: ",
         0) == 0);
     EXPECT_NE(text.find('1'), std::string::npos);
     EXPECT_NE(text.find("2.5"), std::string::npos);
@@ -509,7 +509,7 @@ TEST(Helpers, PacketHexToString)
 
     const auto expect =
             "Type: GPS_DATA, Size: 12, Sender: Flight Controller, Endpoints: [SD_CARD, RADIO], "
-            "Timestamp: 1123581321, Data (hex): 0x00 0x00 0x98 0x41 0x00 0x00 0x04 0x42 0x00 0x00 0x50 0x42";
+            "Timestamp: 1123581321 (312h 06m 21s 321ms), Data (hex): 0x00 0x00 0x98 0x41 0x00 0x00 0x04 0x42 0x00 0x00 0x50 0x42";
     EXPECT_EQ(got, expect);
 }
 

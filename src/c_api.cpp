@@ -218,7 +218,7 @@ extern "C" const void * seds_pkt_data_ptr(const SedsPacketView * pkt, std::size_
     }
 
     if (out_count) *out_count = pkt->payload_len / elem_size;
-    return reinterpret_cast<const void *>(pkt->payload);
+    return pkt->payload;
 }
 
 // ---- string write helper ----
@@ -375,24 +375,24 @@ extern "C" void seds_router_free(const SedsRouter * r)
 
 // ---- logging (bytes/f32) ----
 extern "C" int seds_router_log_bytes(SedsRouter * r, const std::uint32_t ty_u32,
-                                     const std::uint8_t * data, const std::size_t len, const std::uint64_t ts)
+                                     const std::uint8_t * data, const std::size_t len)
 {
     if (!r || (len > 0 && !data)) return status_from_err(TelemetryError::BadArg());
     auto ty = dtype_from_u32(ty_u32);
     if (ty.is_err()) return status_from_err(ty.unwrap_err());
     std::vector<std::uint8_t> v;
     v.insert(v.end(), data, data + len);
-    return ok_or_status(r->inner.log<std::uint8_t>(ty.unwrap(), v, ts));
+    return ok_or_status(r->inner.log<std::uint8_t>(ty.unwrap(), v));
 }
 
 extern "C" int seds_router_log_f32(SedsRouter * r, const std::uint32_t ty_u32,
-                                   const float * vals, const std::size_t n_vals, const std::uint64_t ts)
+                                   const float * vals, const std::size_t n_vals)
 {
     if (!r || (n_vals > 0 && !vals)) return status_from_err(TelemetryError::BadArg());
     auto ty = dtype_from_u32(ty_u32);
     if (ty.is_err()) return status_from_err(ty.unwrap_err());
     const std::vector v(vals, vals + n_vals);
-    return ok_or_status(r->inner.log<float>(ty.unwrap(), v, ts));
+    return ok_or_status(r->inner.log<float>(ty.unwrap(), v));
 }
 
 // ---- receive serialized / packet view ----
@@ -466,7 +466,7 @@ extern "C" int seds_pkt_get_f32(const SedsPacketView * pkt, float * out, std::si
 // ---- typed logging (unaligned-safe) ----
 template<typename T>
 static int log_unaligned_slice_send(Router & router, DataType ty, const void * data,
-                                    std::size_t count, std::uint64_t ts)
+                                    std::size_t count)
 {
     std::vector<T> tmp;
     tmp.reserve(count);
@@ -478,43 +478,39 @@ static int log_unaligned_slice_send(Router & router, DataType ty, const void * d
         std::memcpy(&v, base + i * esz, esz); // unaligned read
         tmp.push_back(v);
     }
-    return ok_or_status(router.log<T>(ty, tmp, ts));
+    return ok_or_status(router.log<T>(ty, tmp));
 }
 
 // queueing variant: build TelemetryPacket and push to TX queue (no Router::log_queue needed)
 template<typename T>
-static int log_unaligned_slice_queue(Router & router, DataType ty, const void * data,
-                                     std::size_t count, std::uint64_t ts)
+static int log_unaligned_slice_queue(Router& router,
+                                     DataType ty,
+                                     const void* data,
+                                     std::size_t count)
 {
-    const auto & meta = message_meta(ty);
-    if (const std::size_t got = count * sizeof(T); got != meta.data_size)
-    {
+    if (!data || count == 0) {
+        return status_from_err(TelemetryError::MissingPayload());
+    }
+
+    const auto& meta = message_meta(ty);
+
+    // Match Router::log<T> size rule (wire width, not sizeof(T) if they differ)
+    const std::size_t got = count * LeBytes<T>::WIDTH;
+    if (got != meta.data_size) {
         return status_from_err(TelemetryError::SizeMismatch(meta.data_size, got));
     }
-    // encode to LE using LeBytes<T>
-    std::vector<T> tmp;
-    tmp.reserve(count);
-    const auto base = static_cast<const std::uint8_t *>(data);
-    for (std::size_t i = 0; i < count; ++i)
-    {
-        const std::size_t esz = sizeof(T);
-        T v;
-        std::memcpy(&v, base + i * esz, esz);
-        tmp.push_back(v);
-    }
-    std::vector<std::uint8_t> payload = encode_slice_le<T>(tmp);
 
-    auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload));
-    const std::vector eps(meta.endpoints);
-    auto pkt_res = TelemetryPacket::New(ty, eps, DEVICE_IDENTIFIER, ts, std::move(payload_arc));
-    if (pkt_res.is_err()) return status_from_err(pkt_res.unwrap_err());
-    return ok_or_status(router.queue_tx_message(pkt_res.unwrap()));
+    // Copy unaligned bytes into aligned storage, then delegate.
+    std::vector<T> tmp(count);
+    std::memcpy(tmp.data(), data, count * sizeof(T));  // safe: tmp is aligned
+
+    // Router::log<T> will encode LE and build the packet.
+    return ok_or_status(router.log<T>(ty, tmp.data(), count));
 }
 
 extern "C" int seds_router_log_typed(SedsRouter * r, std::uint32_t ty_u32,
                                      const void * data, std::size_t count,
-                                     std::size_t elem_size, std::uint32_t elem_kind,
-                                     std::uint64_t ts)
+                                     std::size_t elem_size, std::uint32_t elem_kind)
 {
     if (!r || (count > 0 && !data)) return status_from_err(TelemetryError::BadArg());
     auto ty = dtype_from_u32(ty_u32);
@@ -526,26 +522,26 @@ extern "C" int seds_router_log_typed(SedsRouter * r, std::uint32_t ty_u32,
         case SEDS_EK_UNSIGNED:
             switch (elem_size)
             {
-                case 1: return log_unaligned_slice_send<std::uint8_t>(r->inner, dt, data, count, ts);
-                case 2: return log_unaligned_slice_send<std::uint16_t>(r->inner, dt, data, count, ts);
-                case 4: return log_unaligned_slice_send<std::uint32_t>(r->inner, dt, data, count, ts);
-                case 8: return log_unaligned_slice_send<std::uint64_t>(r->inner, dt, data, count, ts);
+                case 1: return log_unaligned_slice_send<std::uint8_t>(r->inner, dt, data, count);
+                case 2: return log_unaligned_slice_send<std::uint16_t>(r->inner, dt, data, count);
+                case 4: return log_unaligned_slice_send<std::uint32_t>(r->inner, dt, data, count);
+                case 8: return log_unaligned_slice_send<std::uint64_t>(r->inner, dt, data, count);
                 default: return status_from_err(TelemetryError::BadArg());
             }
         case SEDS_EK_SIGNED:
             switch (elem_size)
             {
-                case 1: return log_unaligned_slice_send<std::int8_t>(r->inner, dt, data, count, ts);
-                case 2: return log_unaligned_slice_send<std::int16_t>(r->inner, dt, data, count, ts);
-                case 4: return log_unaligned_slice_send<std::int32_t>(r->inner, dt, data, count, ts);
-                case 8: return log_unaligned_slice_send<std::int64_t>(r->inner, dt, data, count, ts);
+                case 1: return log_unaligned_slice_send<std::int8_t>(r->inner, dt, data, count);
+                case 2: return log_unaligned_slice_send<std::int16_t>(r->inner, dt, data, count);
+                case 4: return log_unaligned_slice_send<std::int32_t>(r->inner, dt, data, count);
+                case 8: return log_unaligned_slice_send<std::int64_t>(r->inner, dt, data, count);
                 default: return status_from_err(TelemetryError::BadArg());
             }
         case SEDS_EK_FLOAT:
             switch (elem_size)
             {
-                case 4: return log_unaligned_slice_send<float>(r->inner, dt, data, count, ts);
-                case 8: return log_unaligned_slice_send<double>(r->inner, dt, data, count, ts);
+                case 4: return log_unaligned_slice_send<float>(r->inner, dt, data, count);
+                case 8: return log_unaligned_slice_send<double>(r->inner, dt, data, count);
                 default: return status_from_err(TelemetryError::BadArg());
             }
         default:
@@ -555,8 +551,7 @@ extern "C" int seds_router_log_typed(SedsRouter * r, std::uint32_t ty_u32,
 
 extern "C" int seds_router_log_queue_typed(SedsRouter * r, std::uint32_t ty_u32,
                                            const void * data, std::size_t count,
-                                           std::size_t elem_size, std::uint32_t elem_kind,
-                                           std::uint64_t ts)
+                                           std::size_t elem_size, std::uint32_t elem_kind)
 {
     if (!r || (count > 0 && !data)) return status_from_err(TelemetryError::BadArg());
     auto ty = dtype_from_u32(ty_u32);
@@ -568,26 +563,26 @@ extern "C" int seds_router_log_queue_typed(SedsRouter * r, std::uint32_t ty_u32,
         case SEDS_EK_UNSIGNED:
             switch (elem_size)
             {
-                case 1: return log_unaligned_slice_queue<std::uint8_t>(r->inner, dt, data, count, ts);
-                case 2: return log_unaligned_slice_queue<std::uint16_t>(r->inner, dt, data, count, ts);
-                case 4: return log_unaligned_slice_queue<std::uint32_t>(r->inner, dt, data, count, ts);
-                case 8: return log_unaligned_slice_queue<std::uint64_t>(r->inner, dt, data, count, ts);
+                case 1: return log_unaligned_slice_queue<std::uint8_t>(r->inner, dt, data, count);
+                case 2: return log_unaligned_slice_queue<std::uint16_t>(r->inner, dt, data, count);
+                case 4: return log_unaligned_slice_queue<std::uint32_t>(r->inner, dt, data, count);
+                case 8: return log_unaligned_slice_queue<std::uint64_t>(r->inner, dt, data, count);
                 default: return status_from_err(TelemetryError::BadArg());
             }
         case SEDS_EK_SIGNED:
             switch (elem_size)
             {
-                case 1: return log_unaligned_slice_queue<std::int8_t>(r->inner, dt, data, count, ts);
-                case 2: return log_unaligned_slice_queue<std::int16_t>(r->inner, dt, data, count, ts);
-                case 4: return log_unaligned_slice_queue<std::int32_t>(r->inner, dt, data, count, ts);
-                case 8: return log_unaligned_slice_queue<std::int64_t>(r->inner, dt, data, count, ts);
+                case 1: return log_unaligned_slice_queue<std::int8_t>(r->inner, dt, data, count);
+                case 2: return log_unaligned_slice_queue<std::int16_t>(r->inner, dt, data, count);
+                case 4: return log_unaligned_slice_queue<std::int32_t>(r->inner, dt, data, count);
+                case 8: return log_unaligned_slice_queue<std::int64_t>(r->inner, dt, data, count);
                 default: return status_from_err(TelemetryError::BadArg());
             }
         case SEDS_EK_FLOAT:
             switch (elem_size)
             {
-                case 4: return log_unaligned_slice_queue<float>(r->inner, dt, data, count, ts);
-                case 8: return log_unaligned_slice_queue<double>(r->inner, dt, data, count, ts);
+                case 4: return log_unaligned_slice_queue<float>(r->inner, dt, data, count);
+                case 8: return log_unaligned_slice_queue<double>(r->inner, dt, data, count);
                 default: return status_from_err(TelemetryError::BadArg());
             }
         default:

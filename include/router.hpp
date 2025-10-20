@@ -162,31 +162,31 @@ namespace seds
 
         // Generic logging over LeBytes
         template<typename T>
-        TelemetryResult<void *> log(DataType ty, const T * data, std::size_t n, std::uint64_t timestamp);
+        TelemetryResult<void *> log(DataType ty, const T * data, std::size_t n);
 
         template<typename T>
-        TelemetryResult<void *> log_queue(DataType ty, const T * data, std::size_t n, std::uint64_t timestamp);
+        TelemetryResult<void *> log_queue(DataType ty, const T * data, std::size_t n);
 
         template<typename T>
-        TelemetryResult<void *> log(DataType ty, const std::vector<T> & data, std::uint64_t timestamp)
+        TelemetryResult<void *> log(DataType ty, const std::vector<T> & data)
         {
-            return log<T>(ty, data.data(), data.size(), timestamp);
+            return log<T>(ty, data.data(), data.size());
         }
 
         template<typename T>
-        TelemetryResult<void *> log_queue(DataType ty, const std::vector<T> & data, std::uint64_t timestamp)
+        TelemetryResult<void *> log_queue(DataType ty, const std::vector<T> & data)
         {
-            return log_queue<T>(ty, data.data(), data.size(), timestamp);
+            return log_queue<T>(ty, data.data(), data.size());
         }
 
-        TelemetryResult<void *> log_bytes(DataType ty, const std::vector<std::uint8_t> & bytes, std::uint64_t ts)
+        TelemetryResult<void *> log_bytes(DataType ty, const std::vector<std::uint8_t> & bytes)
         {
-            return log<std::uint8_t>(ty, bytes, ts);
+            return log<std::uint8_t>(ty, bytes);
         }
 
-        TelemetryResult<void *> log_f32(DataType ty, const std::vector<float> & vals, std::uint64_t ts)
+        TelemetryResult<void *> log_f32(DataType ty, const std::vector<float> & vals)
         {
-            return log<float>(ty, vals, ts);
+            return log<float>(ty, vals);
         }
 
     private:
@@ -321,7 +321,7 @@ namespace seds
 
     // -------------------- Template definitions (headerized) --------------------
     template<typename T>
-    TelemetryResult<void *> Router::log(const DataType ty, const T * data, std::size_t n, std::uint64_t timestamp)
+    TelemetryResult<void *> Router::log(const DataType ty, const T * data, std::size_t n)
     {
         const auto & meta = message_meta(ty);
         if (const std::size_t got = n * LeBytes<T>::WIDTH; got != meta.data_size)
@@ -337,15 +337,14 @@ namespace seds
                 TelemetryPacket::New(ty,
                                      std::vector(meta.endpoints),
                                      DEVICE_IDENTIFIER,
-                                     timestamp,
+                                     clock_->now_ms(),
                                      std::move(payload_arc));
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
         return send(pkt_res.unwrap());
     }
 
     template<typename T>
-    TelemetryResult<void *> Router::log_queue(DataType ty, const T * data, std::size_t n,
-                                                     std::uint64_t timestamp)
+    TelemetryResult<void *> Router::log_queue(DataType ty, const T * data, std::size_t n)
     {
         const auto & meta = message_meta(ty);
         const std::size_t got = n * LeBytes<T>::WIDTH;
@@ -362,7 +361,7 @@ namespace seds
                 TelemetryPacket::New(ty,
                                      std::vector(meta.endpoints),
                                      DEVICE_IDENTIFIER,
-                                     timestamp,
+                                     clock_->now_ms(),
                                      std::move(payload_arc));
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
         return queue_tx_message(pkt_res.unwrap());

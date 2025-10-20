@@ -207,7 +207,7 @@ TEST(Router, SendsAndReceives)
 
     // send GPS_DATA (3 * f32) using Router::log (uses default endpoints from schema)
     std::vector<float> data{1.0f, 2.0f, 3.0f};
-    ASSERT_TRUE(router.log<float>(DataType::GpsData, data, 0).is_ok());
+    ASSERT_TRUE(router.log<float>(DataType::GpsData, data).is_ok());
 
     // --- assertions ---
     ASSERT_TRUE(tx_seen->has_value()) << "no tx packet recorded";
@@ -277,7 +277,7 @@ TEST(Router, QueuedRoundtripBetweenTwoRouters)
 
     // 1) Sender enqueues a packet for TX
     std::vector data{1.0f, 2.0f, 3.0f};
-    ASSERT_TRUE(tx_router.log_queue<float>(DataType::GpsData, data, 0).is_ok());
+    ASSERT_TRUE(tx_router.log_queue<float>(DataType::GpsData, data).is_ok());
 
     // 2) Flush TX queue -> pushes wire frames into TestBus
     ASSERT_TRUE(tx_router.process_send_queue().is_ok());
@@ -311,9 +311,9 @@ TEST(Router, QueuedSelfDeliveryViaReceiveQueue)
         StepClock::NewDefaultBox());
 
     // Enqueue for transmit (3 frames)
-    ASSERT_TRUE(router.log_queue<float>(DataType::GpsData, std::vector{10.0f, 10.25f, 10.5f}, 42).is_ok());
-    ASSERT_TRUE(router.log_queue<float>(DataType::BatteryStatus, std::vector{10.0f, 10.25f, 10.5f, 12.3f}, 42).is_ok());
-    ASSERT_TRUE(router.log_queue<float>(DataType::GpsData, std::vector{10.0f, 10.25f, 10.5f}, 42).is_ok());
+    ASSERT_TRUE(router.log_queue<float>(DataType::GpsData, std::vector{10.0f, 10.25f, 10.5f}).is_ok());
+    ASSERT_TRUE(router.log_queue<float>(DataType::BatteryStatus, std::vector{10.0f, 10.25f, 10.5f, 12.3f}).is_ok());
+    ASSERT_TRUE(router.log_queue<float>(DataType::GpsData, std::vector{10.0f, 10.25f, 10.5f}).is_ok());
 
     ASSERT_TRUE(router.process_send_queue().is_ok());
     ASSERT_EQ(bus.frames->size(), 3u);
@@ -362,7 +362,7 @@ TEST(Timeouts, ProcessAllQueuesTimeoutZeroDrainsFully)
     // Enqueue TX (3)
     for (int i = 0; i < 3; ++i)
     {
-        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}).is_ok());
     }
     // Enqueue RX (2) with only-local endpoint
     for (int i = 0; i < 2; ++i)
@@ -400,7 +400,7 @@ TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget_one_receive_one_send
     // Seed work in both queues (5 of each)
     for (int i = 0; i < 5; ++i)
     {
-        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}).is_ok());
         ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({4.0f, 5.0f, 6.0f}, 1)).is_ok());
     }
 
@@ -441,7 +441,7 @@ TEST(Timeouts, ProcessAllQueuesRespectsNonzeroTimeoutBudget_two_receive_one_send
     // Seed work in both queues (5 of each)
     for (int i = 0; i < 5; ++i)
     {
-        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}, 0).is_ok());
+        ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector<float>{1.0f, 2.0f, 3.0f}).is_ok());
         ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({4.0f, 5.0f, 6.0f}, 1)).is_ok());
     }
 
@@ -479,7 +479,7 @@ TEST(Timeouts, ProcessAllQueuesHandlesU64Wraparound)
              StepClock::NewBox(std::numeric_limits<uint64_t>::max() - 1, /*step=*/2));
 
     // One TX and one RX (RX only-local to avoid creating extra TX on receive)
-    ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector{1.0f, 2.0f, 3.0f}, 0).is_ok());
+    ASSERT_TRUE(r.log_queue<float>(DataType::GpsData, std::vector{1.0f, 2.0f, 3.0f}).is_ok());
     ASSERT_TRUE(r.rx_packet_to_queue(MkRxOnlyLocal({4.0f, 5.0f, 6.0f}, 7)).is_ok());
 
     // Small budget; wrapping should allow one iteration then stop
@@ -570,12 +570,12 @@ static int run_and_capture(const std::string & cmd,
     if (out)
     {
         std::ifstream f(outp);
-        out->assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        out->assign(std::istreambuf_iterator(f), std::istreambuf_iterator<char>());
     }
     if (err)
     {
         std::ifstream f(errp);
-        err->assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        err->assign(std::istreambuf_iterator(f), std::istreambuf_iterator<char>());
     }
 
     // Clean up temp files (ignore errors)

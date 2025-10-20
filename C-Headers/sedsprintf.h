@@ -239,7 +239,6 @@ void seds_router_free(SedsRouter * r);
  * @param count      Number of elements at @p data.
  * @param elem_size  Size of each element in bytes (1,2,4, or 8).
  * @param elem_kind  Element kind (unsigned/signed/float).
- * @param timestamp  Sample timestamp (router does not alter this).
  * @return SEDS_OK on success, or a negative @ref SedsResult.
  *
  * @retval SEDS_BAD_ARG If any argument is invalid.
@@ -252,8 +251,7 @@ SedsResult seds_router_log_typed(SedsRouter * r,
                                  const void * data,
                                  size_t count,
                                  size_t elem_size,
-                                 SedsElemKind elem_kind,
-                                 uint64_t timestamp);
+                                 SedsElemKind elem_kind);
 
 /**
  * @brief Queue a typed slice to the TX queue (no immediate transmit).
@@ -267,7 +265,6 @@ SedsResult seds_router_log_typed(SedsRouter * r,
  * @param count      Number of elements.
  * @param elem_size  Size of each element (1,2,4,8).
  * @param elem_kind  Element kind (unsigned/signed/float).
- * @param timestamp  Sample timestamp.
  * @return SEDS_OK on success, or a negative @ref SedsResult.
  */
 SedsResult seds_router_log_queue_typed(SedsRouter * r,
@@ -275,9 +272,7 @@ SedsResult seds_router_log_queue_typed(SedsRouter * r,
                                        const void * data,
                                        size_t count,
                                        size_t elem_size,
-                                       SedsElemKind elem_kind,
-                                       uint64_t timestamp);
-
+                                       SedsElemKind elem_kind);
 // ==============================
 // Convenience logging forms
 // ==============================
@@ -289,7 +284,6 @@ SedsResult seds_router_log_queue_typed(SedsRouter * r,
  * @param ty        Telemetry data type.
  * @param data      Pointer to bytes (must not be NULL if @p len>0).
  * @param len       Number of bytes at @p data.
- * @param timestamp Sample timestamp.
  * @return SEDS_OK on success, or a negative @ref SedsResult.
  *
  * @note The router validates that @p len matches the schema for @p ty.
@@ -297,8 +291,7 @@ SedsResult seds_router_log_queue_typed(SedsRouter * r,
 SedsResult seds_router_log_bytes(SedsRouter * r,
                                  SedsDataType ty,
                                  const uint8_t * data,
-                                 size_t len,
-                                 uint64_t timestamp);
+                                 size_t len);
 
 /**
  * @brief Log an array of 32-bit floats for @p ty.
@@ -307,14 +300,12 @@ SedsResult seds_router_log_bytes(SedsRouter * r,
  * @param ty        Telemetry data type.
  * @param vals      Pointer to @p n_vals f32 values.
  * @param n_vals    Number of float values (bytes = n_vals * 4).
- * @param timestamp Sample timestamp.
  * @return SEDS_OK on success, or a negative @ref SedsResult.
  */
 SedsResult seds_router_log_f32(SedsRouter * r,
                                SedsDataType ty,
                                const float * vals,
-                               size_t n_vals,
-                               uint64_t timestamp);
+                               size_t n_vals);
 
 
 // ==============================
@@ -659,16 +650,14 @@ template<typename T>
 static SedsResult seds_router(SedsRouter * router,
                               SedsDataType datatype,
                               const T * data,
-                              size_t count,
-                              uint64_t timestamp)
+                              size_t count)
 {
     return seds_router_log_typed(router,
                                  datatype,
                                  static_cast<const void *>(data),
                                  count,
                                  seds_detail::elem_traits<T>::size,
-                                 seds_detail::elem_traits<T>::kind,
-                                 timestamp);
+                                 seds_detail::elem_traits<T>::kind);
 }
 
 /**
@@ -678,16 +667,14 @@ template<typename T>
 static SedsResult seds_router_queue(SedsRouter * router,
                                     SedsDataType datatype,
                                     const T * data,
-                                    size_t count,
-                                    uint64_t timestamp)
+                                    size_t count)
 {
     return seds_router_log_queue_typed(router,
                                        datatype,
                                        static_cast<const void *>(data),
                                        count,
                                        seds_detail::elem_traits<T>::size,
-                                       seds_detail::elem_traits<T>::kind,
-                                       timestamp);
+                                       seds_detail::elem_traits<T>::kind);
 }
 
 /**
@@ -734,7 +721,7 @@ static SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count
 /**
  * @brief C11 convenience wrapper that deduces element kind/size from @p data and logs immediately.
  */
-#define seds_router_log(router, datatype, data, count, timestamp)                       \
+#define seds_router_log(router, datatype, data, count)                       \
     (__extension__({                                                                    \
         const void   *_seds_data  = (const void*)(data);                                \
         size_t        _seds_count = (size_t)(count);                                    \
@@ -742,13 +729,13 @@ static SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count
         SedsElemKind  _seds_kind;                                                       \
         SEDS__KIND_SIZE((data), _seds_kind, _seds_esize);                               \
         seds_router_log_typed((router), (datatype), _seds_data, _seds_count,            \
-                              _seds_esize, _seds_kind, (timestamp));                    \
+                              _seds_esize, _seds_kind);                    \
     }))
 
 /**
  * @brief C11 convenience wrapper that deduces element kind/size from @p data and queues it.
  */
-#define seds_router_log_queue(router, datatype, data, count, timestamp)                 \
+#define seds_router_log_queue(router, datatype, data, count)                 \
     (__extension__({                                                                    \
         const void   *_seds_data  = (const void*)(data);                                \
         size_t        _seds_count = (size_t)(count);                                    \
@@ -756,7 +743,7 @@ static SedsResult seds_pkt_get(const SedsPacketView * pkt, T * out, size_t count
         SedsElemKind  _seds_kind;                                                       \
         SEDS__KIND_SIZE((data), _seds_kind, _seds_esize);                               \
         seds_router_log_queue_typed((router), (datatype), _seds_data, _seds_count,      \
-                                    _seds_esize, _seds_kind, (timestamp));              \
+                                    _seds_esize, _seds_kind);              \
     }))
 
 /**

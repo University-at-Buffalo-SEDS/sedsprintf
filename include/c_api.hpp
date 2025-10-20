@@ -64,10 +64,10 @@ void seds_router_free(const SedsRouter * r);
 
 // ---- logging (bytes / f32) ----
 int seds_router_log_bytes(SedsRouter * r, std::uint32_t ty_u32,
-                          const std::uint8_t * data, std::size_t len, std::uint64_t ts);
+                          const std::uint8_t * data, std::size_t len);
 
 int seds_router_log_f32(SedsRouter * r, std::uint32_t ty_u32,
-                        const float * vals, std::size_t n_vals, std::uint64_t ts);
+                        const float * vals, std::size_t n_vals);
 
 // ---- receive serialized / packet view ----
 int seds_router_receive_serialized(SedsRouter * r, const std::uint8_t * bytes, std::size_t len);
@@ -109,13 +109,11 @@ int seds_pkt_get_f32(const SedsPacketView * pkt, float * out, std::size_t n);
 // ---- generic typed logging (unaligned-safe) ----
 int seds_router_log_typed(SedsRouter * r, std::uint32_t ty_u32,
                           const void * data, std::size_t count,
-                          std::size_t elem_size, std::uint32_t elem_kind,
-                          std::uint64_t ts);
+                          std::size_t elem_size, std::uint32_t elem_kind);
 
 int seds_router_log_queue_typed(SedsRouter * r, std::uint32_t ty_u32,
                                 const void * data, std::size_t count,
-                                std::size_t elem_size, std::uint32_t elem_kind,
-                                std::uint64_t ts);
+                                std::size_t elem_size, std::uint32_t elem_kind);
 
 #ifdef __cplusplus
 } // extern "C"

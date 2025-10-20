@@ -87,7 +87,7 @@ namespace seds
 
     // Encode a slice of T:LeBytes to a single contiguous LE buffer.
     template<typename T>
-    inline std::vector<std::uint8_t> encode_slice_le(const std::vector<T> & data)
+    std::vector<std::uint8_t> encode_slice_le(const std::vector<T> & data)
     {
         const std::size_t total = data.size() * LeBytes<T>::WIDTH;
         std::vector<std::uint8_t> buf(total);
@@ -99,7 +99,7 @@ namespace seds
     }
 
     template<typename T>
-    inline std::vector<std::uint8_t> encode_slice_le(const T * ptr, std::size_t n)
+    std::vector<std::uint8_t> encode_slice_le(const T * ptr, std::size_t n)
     {
         const std::size_t total = n * LeBytes<T>::WIDTH;
         std::vector<std::uint8_t> buf(total);
@@ -198,8 +198,8 @@ namespace seds
 
         std::function<TelemetryResult<void *>(const std::vector<std::uint8_t> &)> transmit_;
         BoardConfig cfg_;
-        std::vector<RxQueueItem> received_queue_;
-        std::vector<TelemetryPacket> transmit_queue_;
+        std::queue<RxQueueItem> received_queue_;
+        std::queue<TelemetryPacket> transmit_queue_;
         std::unique_ptr<Clock> clock_;
     };
 

@@ -19,8 +19,8 @@ namespace seds
     {
         while (!transmit_queue_.empty())
         {
-            TelemetryPacket pkt = std::move(transmit_queue_.back());
-            transmit_queue_.pop_back();
+            TelemetryPacket pkt = std::move(transmit_queue_.front());
+            transmit_queue_.pop();
             if (auto r = send(pkt); r.is_err()) return r;
         }
         return TelemetryResult<void *>::Ok(nullptr);
@@ -34,20 +34,20 @@ namespace seds
 
     void Router::clear_queues()
     {
-        transmit_queue_.clear();
-        received_queue_.clear();
+        clear_rx_queue();
+        clear_tx_queue();
     }
 
-    void Router::clear_rx_queue() { received_queue_.clear(); }
-    void Router::clear_tx_queue() { transmit_queue_.clear(); }
+    void Router::clear_rx_queue() { received_queue_ = {}; }
+    void Router::clear_tx_queue() { transmit_queue_ = {}; }
 
     TelemetryResult<void *> Router::process_tx_queue_with_timeout(const std::uint32_t timeout_ms)
     {
         const std::uint64_t start = clock_->now_ms();
         while (!transmit_queue_.empty())
         {
-            TelemetryPacket pkt = std::move(transmit_queue_.back());
-            transmit_queue_.pop_back();
+            TelemetryPacket pkt = std::move(transmit_queue_.front());
+            transmit_queue_.pop();
             if (auto r = send(pkt); r.is_err()) return r;
             if (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)) break;
         }
@@ -68,8 +68,8 @@ namespace seds
         const std::uint64_t start = clock_->now_ms();
         while (!received_queue_.empty())
         {
-            RxQueueItem it = std::move(received_queue_.back());
-            received_queue_.pop_back();
+            RxQueueItem it = std::move(received_queue_.front());
+            received_queue_.pop();
             if (auto r = handle_rx_queue_item(std::move(it)); r.is_err()) return r;
             if (clock_->now_ms() - start >= static_cast<std::uint64_t>(timeout_ms)) break;
         }
@@ -87,8 +87,8 @@ namespace seds
 
             if (!transmit_queue_.empty())
             {
-                TelemetryPacket pkt = std::move(transmit_queue_.back());
-                transmit_queue_.pop_back();
+                TelemetryPacket pkt = std::move(transmit_queue_.front());
+                transmit_queue_.pop();
                 if (auto r = send(pkt); r.is_err()) return r;
                 did_any = true;
             }
@@ -98,8 +98,8 @@ namespace seds
             }
             if (!received_queue_.empty())
             {
-                RxQueueItem it = std::move(received_queue_.back());
-                received_queue_.pop_back();
+                RxQueueItem it = std::move(received_queue_.front());
+                received_queue_.pop();
                 if (auto r = handle_rx_queue_item(std::move(it)); r.is_err()) return r;
                 did_any = true;
             }
@@ -117,7 +117,7 @@ namespace seds
     TelemetryResult<void *> Router::queue_tx_message(TelemetryPacket pkt)
     {
         if (auto v = pkt.Validate(); v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
-        transmit_queue_.push_back(std::move(pkt));
+        transmit_queue_.push(std::move(pkt));
         return TelemetryResult<void *>::Ok(nullptr);
     }
 
@@ -125,8 +125,8 @@ namespace seds
     {
         while (!received_queue_.empty())
         {
-            RxQueueItem it = std::move(received_queue_.back());
-            received_queue_.pop_back();
+            RxQueueItem it = std::move(received_queue_.front());
+            received_queue_.pop();
             if (auto r = handle_rx_queue_item(std::move(it)); r.is_err()) return r;
         }
         return TelemetryResult<void *>::Ok(nullptr);
@@ -134,14 +134,14 @@ namespace seds
 
     TelemetryResult<void *> Router::rx_serialized_packet_to_queue(const std::vector<std::uint8_t> & bytes)
     {
-        received_queue_.emplace_back(bytes);
+        received_queue_.emplace(bytes);
         return TelemetryResult<void *>::Ok(nullptr);
     }
 
     TelemetryResult<void *> Router::rx_packet_to_queue(TelemetryPacket pkt)
     {
         if (auto v = pkt.Validate(); v.is_err()) return TelemetryResult<void *>::Err(v.unwrap_err());
-        received_queue_.emplace_back(std::move(pkt));
+        received_queue_.emplace(std::move(pkt));
         return TelemetryResult<void *>::Ok(nullptr);
     }
 

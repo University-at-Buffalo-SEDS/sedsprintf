@@ -694,7 +694,7 @@ static int log_unaligned_slice_queue(Router& router, DataType ty, const void* da
     if (!data && count) return status_from_err(TelemetryError::BadArg());
     std::vector<T> tmp(count);
     std::memcpy(tmp.data(), data, count * sizeof(T));
-    // If your Router has a queue variant, call it; otherwise reuse log<T> and queue the packet.
+    // If Router has a queue variant, call it; otherwise reuse log<T> and queue the packet.
     return ok_or_status(router.log<T>(ty, tmp));
 }
 

@@ -47,7 +47,7 @@ uint64_t node_now_since_bus_ms(void *user)
 // Define the global router state here (one definition only)
 RouterState g_router = {.r = NULL, .created = 0};
 
-// --- TX: convert your bytes to CAN frames and send via HAL later; stub for now ---
+// --- TX: convert bytes to CAN frames and send via HAL later; stub for now ---
 SedsResult tx_send(const uint8_t * bytes, size_t len, void * user)
 {
     (void) user;

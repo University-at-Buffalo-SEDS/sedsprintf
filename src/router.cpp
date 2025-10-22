@@ -225,13 +225,6 @@ namespace seds
 
         // Target only the chosen local endpoints
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(buf));
-
-        // SAFEST: pass owned types explicitly so TelemetryPacket owns everything
-        // If your TelemetryPacket::New accepts shared_ptrs:
-        //   TelemetryPacket::New(DataType, const std::vector<DataEndpoint>&,
-        //                        std::shared_ptr<std::string> sender,
-        //                        std::uint64_t timestamp,
-        //                        std::shared_ptr<const std::vector<uint8_t>> payload);
         TelemetryResult<TelemetryPacket> pkt_res =
                 TelemetryPacket::New(DataType::TelemetryError,
                                      locals,

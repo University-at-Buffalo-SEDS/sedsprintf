@@ -273,6 +273,7 @@ SedsResult seds_router_log_queue_typed(SedsRouter * r,
                                        size_t count,
                                        size_t elem_size,
                                        SedsElemKind elem_kind);
+
 // ==============================
 // Convenience logging forms
 // ==============================

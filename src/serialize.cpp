@@ -1,5 +1,10 @@
+// serialize.cpp — leak-free, Arc-like ownership for sender/endpoints/payload
+
 #include "serialize.hpp"
 #include <cstring>
+#include <memory>
+#include <vector>
+#include <algorithm>
 
 namespace seds
 {
@@ -50,30 +55,30 @@ namespace seds
         return true;
     }
 
-    // ---- serialize_packet ----
+    // ---- serialize_packet (no borrows to temporaries; works with shared_ptr fields) ----
     std::vector<std::uint8_t> serialize_packet(const TelemetryPacket & pkt)
     {
         const std::size_t cap = packet_wire_size(pkt);
         std::vector<std::uint8_t> out;
         out.reserve(cap);
 
-        // type
+        // type (u32 LE)
         const auto ty = static_cast<std::uint32_t>(pkt.ty);
         out.push_back(static_cast<std::uint8_t>(ty & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((ty >> 8) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((ty >> 16) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((ty >> 24) & 0xFFu));
 
-        // data_size (u32)
+        // data_size (u32 LE)
         const auto dsz = static_cast<std::uint32_t>(pkt.data_size);
         out.push_back(static_cast<std::uint8_t>(dsz & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((dsz >> 8) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((dsz >> 16) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((dsz >> 24) & 0xFFu));
 
-        // sender_len (u32) and later append sender bytes
-        const char * sender_c = pkt.sender ? pkt.sender : "";
-        const std::size_t sender_len_sz = std::strlen(sender_c);
+        // sender_len (u32 LE)
+        const std::size_t sender_len_sz =
+            (pkt.sender ? pkt.sender->size() : 0u);
         const auto sender_len = static_cast<std::uint32_t>(sender_len_sz);
         out.push_back(static_cast<std::uint8_t>(sender_len & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((sender_len >> 8) & 0xFFu));
@@ -83,21 +88,19 @@ namespace seds
         // timestamp (u64 LE)
         const std::uint64_t ts = pkt.timestamp;
         for (int i = 0; i < 8; ++i)
-        {
             out.push_back(static_cast<std::uint8_t>((ts >> (8 * i)) & 0xFFu));
-        }
 
-        // num_endpoints (u32)
-        const auto nep = static_cast<std::uint32_t>(pkt.endpoints ? pkt.endpoints->size() : 0);
+        // num_endpoints (u32 LE)
+        const auto nep = static_cast<std::uint32_t>(pkt.endpoints ? pkt.endpoints->size() : 0u);
         out.push_back(static_cast<std::uint8_t>(nep & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((nep >> 8) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((nep >> 16) & 0xFFu));
         out.push_back(static_cast<std::uint8_t>((nep >> 24) & 0xFFu));
 
-        // endpoints (u32 each)
+        // endpoints (u32 LE each)
         if (pkt.endpoints)
         {
-            for (DataEndpoint ep: *pkt.endpoints)
+            for (DataEndpoint ep : *pkt.endpoints)
             {
                 const auto v = static_cast<std::uint32_t>(ep);
                 out.push_back(static_cast<std::uint8_t>(v & 0xFFu));
@@ -108,17 +111,17 @@ namespace seds
         }
 
         // sender bytes
-        out.insert(out.end(), sender_c, sender_c + sender_len_sz);
+        if (sender_len_sz)
+            out.insert(out.end(), pkt.sender->data(), pkt.sender->data() + sender_len_sz);
 
         // payload
         if (pkt.payload)
-        {
             out.insert(out.end(), pkt.payload->begin(), pkt.payload->end());
-        }
+
         return out;
     }
 
-    // ---- deserialize_packet ----
+    // ---- deserialize_packet (NO LEAKS; sender becomes shared_ptr<string>) ----
     TelemetryResult<TelemetryPacket> deserialize_packet(const std::vector<std::uint8_t> & buf)
     {
         ByteReader r(buf);
@@ -130,48 +133,50 @@ namespace seds
 
         const char * err = nullptr;
 
+        // type (u32)
         auto ty_raw_opt = r.read_u32(&err);
         if (!ty_raw_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const std::uint32_t ty_raw = *ty_raw_opt;
 
-        // NOTE: uses the non-template overload from serialize.hpp
+        // convert type
         auto ty_opt = try_enum_from_u32(ty_raw);
-        if (!ty_opt)
-        {
-            return TelemetryResult<TelemetryPacket>::Err(TelemetryError::InvalidType());
-        }
+        if (!ty_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::InvalidType());
         const DataType ty = *ty_opt;
 
+        // data_size (u32) -> size_t
         auto dsz_u32 = r.read_u32(&err);
         if (!dsz_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const auto dsz = static_cast<std::size_t>(*dsz_u32);
 
+        // sender_len (u32) -> size_t
         auto sender_len_u32 = r.read_u32(&err);
         if (!sender_len_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const auto sender_len = static_cast<std::size_t>(*sender_len_u32);
 
+        // timestamp (u64)
         auto ts_u64 = r.read_u64(&err);
         if (!ts_u64) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const std::uint64_t ts = *ts_u64;
 
+        // num_endpoints (u32)
         auto nep_u32 = r.read_u32(&err);
         if (!nep_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const auto nep = static_cast<std::size_t>(*nep_u32);
 
-        const std::size_t need =
-                header_size_bytes() + nep * ENDPOINT_ELEM_SIZE + dsz;
+        // total needed bytes = header + endpoints + sender + payload
+        const std::size_t need = header_size_bytes() + nep * ENDPOINT_ELEM_SIZE + sender_len + dsz;
         if (buf.size() < need)
         {
             return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize("short buffer"));
         }
 
+        // endpoints
         std::vector<DataEndpoint> eps;
         eps.reserve(nep);
         for (std::size_t i = 0; i < nep; ++i)
         {
             auto e_u32 = r.read_u32(&err);
             if (!e_u32) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
-            // NOTE: endpoint conversion uses the dedicated overload
             auto ep_opt = try_enum_from_u32_endpoint(*e_u32);
             if (!ep_opt)
             {
@@ -180,7 +185,7 @@ namespace seds
             eps.push_back(*ep_opt);
         }
 
-        // sender bytes -> validate UTF-8 -> leak to persistent const char* (match Rust &'static str)
+        // sender (OWNED, UTF-8 validated) — std::shared_ptr<std::string>
         auto sender_ptr_opt = r.read_bytes(sender_len, &err);
         if (!sender_ptr_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const std::uint8_t * sender_ptr = *sender_ptr_opt;
@@ -188,27 +193,30 @@ namespace seds
         {
             return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize("sender not UTF-8"));
         }
-        auto sender_c = new char[sender_len + 1];
-        std::memcpy(sender_c, sender_ptr, sender_len);
-        sender_c[sender_len] = '\0';
+        auto sender_arc = std::make_shared<std::string>(
+            reinterpret_cast<const char*>(sender_ptr),
+            sender_len
+        );
 
-        // payload bytes
+        // payload bytes (OWNED)
         auto payload_ptr_opt = r.read_bytes(dsz, &err);
         if (!payload_ptr_opt) return TelemetryResult<TelemetryPacket>::Err(TelemetryError::Deserialize(err));
         const std::uint8_t * payload_ptr = *payload_ptr_opt;
-        std::vector payload(payload_ptr, payload_ptr + dsz);
+        auto payload_vec = std::make_shared<const std::vector<std::uint8_t>>(
+            payload_ptr, payload_ptr + dsz
+        );
 
-        // Construct packet (mirrors Rust)
-        auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(payload));
+        // endpoints arc
         auto endpoints_arc = std::make_shared<const std::vector<DataEndpoint>>(std::move(eps));
 
+        // Construct packet (owned fields; no leaks)
         TelemetryPacket pkt;
-        pkt.ty = ty;
+        pkt.ty        = ty;
         pkt.data_size = dsz;
-        pkt.sender = sender_c; // leaked, as in Rust Box::leak
+        pkt.sender    = std::move(sender_arc);
         pkt.endpoints = std::move(endpoints_arc);
         pkt.timestamp = ts;
-        pkt.payload = std::move(payload_arc);
+        pkt.payload   = std::move(payload_vec);
 
         // Validate invariants similar to Rust new()/validate()
         if (auto v = pkt.Validate(); v.is_err())

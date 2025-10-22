@@ -336,7 +336,7 @@ namespace seds
         TelemetryResult<TelemetryPacket> pkt_res =
                 TelemetryPacket::New(ty,
                                      std::vector(meta.endpoints),
-                                     DEVICE_IDENTIFIER,
+                                     std::make_shared<std::string>(DEVICE_IDENTIFIER),
                                      clock_->now_ms(),
                                      std::move(payload_arc));
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
@@ -360,7 +360,7 @@ namespace seds
         TelemetryResult<TelemetryPacket> pkt_res =
                 TelemetryPacket::New(ty,
                                      std::vector(meta.endpoints),
-                                     DEVICE_IDENTIFIER,
+                                     std::make_shared<std::string>(DEVICE_IDENTIFIER),
                                      clock_->now_ms(),
                                      std::move(payload_arc));
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());

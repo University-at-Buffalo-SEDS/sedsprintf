@@ -35,6 +35,15 @@ static uint64_t host_now_ms(void * user)
 #endif
 }
 
+
+uint64_t node_now_since_bus_ms(void *user)
+{
+    const RouterState router = g_router;               // same user passed to TX
+    const uint64_t now = host_now_ms(NULL);       // monotonic ms
+    return (router.r) ? (now - router.start_time) : 0;
+}
+
+
 // Define the global router state here (one definition only)
 RouterState g_router = {.r = NULL, .created = 0};
 
@@ -101,7 +110,7 @@ SedsResult init_telemetry_router(void)
     SedsRouter * r = seds_router_new(
         tx_send,
         NULL, // tx_user
-        host_now_ms,
+        node_now_since_bus_ms,
         locals,
         sizeof(locals) / sizeof(locals[0])
     );
@@ -116,25 +125,27 @@ SedsResult init_telemetry_router(void)
 
     g_router.r = r;
     g_router.created = 1;
+    g_router.start_time = host_now_ms(NULL);
     return SEDS_OK;
 }
 
-SedsResult log_telemetry_synchronous(SedsDataType data_type, const float * data, size_t data_len)
+SedsResult log_telemetry_synchronous(
+    SedsDataType data_type,
+    const void *data,
+    size_t element_count,
+    size_t element_size)
 {
-    if (!g_router.r)
-    {
-        // lazy init if not yet created
-        if (init_telemetry_router() != SEDS_OK) return SEDS_ERR;
+    if (!g_router.r) {
+        if (init_telemetry_router() != SEDS_OK)
+            return SEDS_ERR;
     }
-    if (!data || data_len == 0) return SEDS_ERR;
+    if (!data || element_count == 0 || element_size == 0)
+        return SEDS_ERR;
 
-    // If you want timestamps from HAL, you can expose HAL_GetTick() here via a weak symbol or
-    // pass a timestamp of 0 to use the router’s internal time policy, if supported.
-    uint64_t ts = 0; // replace with board tick if your C API accepts a timestamp parameter elsewhere
+    // total bytes = number of elements * size of each element
+    const size_t total_bytes = element_count * element_size;
 
-    // If your C API uses an overload with timestamp, call that; otherwise plain log:
-    // e.g., seds_router_log_ts(g_router.r, data_type, data, (uint32_t)data_len, ts);
-    return seds_router_log(g_router.r, data_type, data, data_len, ts);
+    return seds_router_log(g_router.r, data_type, data, total_bytes);
 }
 
 SedsResult dispatch_tx_queue(void)
@@ -158,22 +169,23 @@ SedsResult process_rx_queue(void)
 }
 
 
-SedsResult log_telemetry_asynchronous(SedsDataType data_type, const float * data, size_t data_len)
+SedsResult log_telemetry_asynchronous(
+    SedsDataType data_type,
+    const void *data,
+    size_t element_count,
+    size_t element_size)
 {
-    if (!g_router.r)
-    {
-        // lazy init if not yet created
-        if (init_telemetry_router() != SEDS_OK) return SEDS_ERR;
+    if (!g_router.r) {
+        if (init_telemetry_router() != SEDS_OK)
+            return SEDS_ERR;
     }
-    if (!data || data_len == 0) return SEDS_ERR;
+    if (!data || element_count == 0 || element_size == 0)
+        return SEDS_ERR;
 
-    // If you want timestamps from HAL, you can expose HAL_GetTick() here via a weak symbol or
-    // pass a timestamp of 0 to use the router’s internal time policy, if supported.
-    uint64_t ts = 0; // replace with board tick if your C API accepts a timestamp parameter elsewhere
+    // total bytes = number of elements * size of each element
+    const size_t total_bytes = element_count * element_size;
 
-    // If your C API uses an overload with timestamp, call that; otherwise plain log:
-    // e.g., seds_router_log_ts(g_router.r, data_type, data, (uint32_t)data_len, ts);
-    return seds_router_log_queue(g_router.r, data_type, data, data_len, ts);
+    return seds_router_log_queue(g_router.r, data_type, data, total_bytes);
 }
 
 

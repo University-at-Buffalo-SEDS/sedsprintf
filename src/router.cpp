@@ -1,6 +1,15 @@
+// router.cpp — leak-free, Rust-parity rewrite
 #include "router.hpp"
+
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <deque>     // if Router uses std::queue internally, fine; we only interact via methods
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
+
 #include "serialize.hpp"
 
 extern "C" int swprintf(wchar_t * s, size_t n, const wchar_t * fmt, ...);
@@ -108,7 +117,6 @@ namespace seds
                 break;
             }
             if (!did_any) break;
-
         }
 
         return TelemetryResult<void *>::Ok(nullptr);
@@ -149,7 +157,7 @@ namespace seds
                                                           std::optional<DataEndpoint> dest,
                                                           const TelemetryError & e)
     {
-        // Compose message once
+        // Compose message once (owned std::string)
         std::string error_msg;
         if (dest.has_value())
         {
@@ -217,10 +225,17 @@ namespace seds
 
         // Target only the chosen local endpoints
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(buf));
+
+        // SAFEST: pass owned types explicitly so TelemetryPacket owns everything
+        // If your TelemetryPacket::New accepts shared_ptrs:
+        //   TelemetryPacket::New(DataType, const std::vector<DataEndpoint>&,
+        //                        std::shared_ptr<std::string> sender,
+        //                        std::uint64_t timestamp,
+        //                        std::shared_ptr<const std::vector<uint8_t>> payload);
         TelemetryResult<TelemetryPacket> pkt_res =
                 TelemetryPacket::New(DataType::TelemetryError,
                                      locals,
-                                     DEVICE_IDENTIFIER,
+                                     std::make_shared<std::string>(DEVICE_IDENTIFIER),
                                      clock_->now_ms(),
                                      std::move(payload_arc));
         if (pkt_res.is_err()) return TelemetryResult<void *>::Err(pkt_res.unwrap_err());
@@ -247,7 +262,7 @@ namespace seds
             }
         }
 
-        // Serialize exactly once.
+        // Serialize exactly once (by value, no dangling views).
         const std::vector<std::uint8_t> bytes = serialize_packet(pkt);
 
         if (send_remote && transmit_)
@@ -350,4 +365,5 @@ namespace seds
 
         return TelemetryResult<void *>::Ok(nullptr);
     }
+
 } // namespace seds

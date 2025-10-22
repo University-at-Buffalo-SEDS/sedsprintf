@@ -5,9 +5,6 @@
 
 #ifdef __cplusplus
 extern "C" {
-
-
-
 #endif
 
 // Router state type
@@ -15,6 +12,7 @@ typedef struct
 {
     SedsRouter * r;
     uint8_t created;
+    uint64_t start_time;
 } RouterState;
 
 // A single global router state (defined in telemetry.c)
@@ -29,9 +27,17 @@ SedsResult on_radio_packet(const SedsPacketView * pkt, void * user);
 SedsResult init_telemetry_router(void);
 
 // Log a telemetry sample (1+ floats) with the given SedsDataType.
-SedsResult log_telemetry_synchronous(SedsDataType data_type, const float * data, size_t data_len);
+SedsResult log_telemetry_synchronous(
+    SedsDataType data_type,
+    const void * data,
+    size_t element_count,
+    size_t element_size);
 
-SedsResult log_telemetry_asynchronous(SedsDataType data_type, const float * data, size_t data_len);
+SedsResult log_telemetry_asynchronous(
+    SedsDataType data_type,
+    const void * data,
+    size_t element_count,
+    size_t element_size);
 
 SedsResult dispatch_tx_queue(void);
 

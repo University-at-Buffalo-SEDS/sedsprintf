@@ -127,7 +127,7 @@ namespace seds
     {
         DataType ty{};
         std::size_t data_size{0};
-        const char * sender{nullptr};
+        std::shared_ptr<const std::string> sender;
         std::shared_ptr<const std::vector<DataEndpoint>> endpoints; // Arc<[DataEndpoint]>
         std::uint64_t timestamp{0};
         std::shared_ptr<const std::vector<std::uint8_t>> payload; // Arc<[u8]>
@@ -139,7 +139,7 @@ namespace seds
             p.data_size = 0;
             p.payload = std::make_shared<const std::vector<uint8_t>>();
             p.endpoints = std::make_shared<const std::vector<DataEndpoint>>();
-            p.sender = DEVICE_IDENTIFIER;
+            p.sender = std::make_shared<std::string>(DEVICE_IDENTIFIER);
             p.timestamp = 0;
             return p;
         }
@@ -148,7 +148,7 @@ namespace seds
         static TelemetryResult<TelemetryPacket> New(
             DataType ty,
             const std::vector<DataEndpoint> & endpoints,
-            const char * sender,
+            const std::shared_ptr<const std::string> & sender,
             std::uint64_t timestamp,
             std::shared_ptr<const std::vector<std::uint8_t>> payload);
 

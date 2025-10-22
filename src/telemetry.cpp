@@ -11,7 +11,7 @@ namespace seds
     TelemetryResult<TelemetryPacket> TelemetryPacket::New(
         const DataType ty,
         const std::vector<DataEndpoint> & endpoints,
-        const char * sender,
+        const std::shared_ptr<const std::string> & sender,
         const std::uint64_t timestamp,
         std::shared_ptr<const std::vector<std::uint8_t>> payload)
     {
@@ -51,7 +51,7 @@ namespace seds
                 TelemetryError::SizeMismatch(meta.data_size, bytes.size()));
         }
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(bytes);
-        return New(ty, endpoints, DEVICE_IDENTIFIER, timestamp, std::move(payload_arc));
+        return New(ty, endpoints, std::make_shared<std::string>( DEVICE_IDENTIFIER), timestamp, std::move(payload_arc));
     }
 
     TelemetryResult<TelemetryPacket> TelemetryPacket::FromF32Slice(
@@ -85,7 +85,7 @@ namespace seds
             bytes.insert(bytes.end(), out, out + 4);
         }
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(bytes));
-        return TelemetryPacket::New(ty, endpoints, DEVICE_IDENTIFIER, timestamp, std::move(payload_arc));
+        return TelemetryPacket::New(ty, endpoints, std::make_shared<std::string>(DEVICE_IDENTIFIER), timestamp, std::move(payload_arc));
     }
 
     TelemetryResult<void *> TelemetryPacket::Validate() const
@@ -144,7 +144,7 @@ namespace seds
         std::ostringstream out;
         out << "Type: " << data_type_as_str(ty)
                 << ", Size: " << data_size
-                << ", Sender: " << (sender ? sender : "")
+                << ", Sender: " << (sender ? *sender : "")
                 << ", Endpoints: [" << endpoints_s << "]"
                 << ", Timestamp: " << timestamp
                 << " (" << human_time.str() << ")";

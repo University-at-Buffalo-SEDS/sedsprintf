@@ -73,7 +73,7 @@ static TelemetryPacket MakeGpsPacketFromF32s(const std::vector<float> & vals,
     }
     const auto payload_arc = std::make_shared<const std::vector<uint8_t>>(std::move(bytes));
     TelemetryResult<TelemetryPacket> r =
-            TelemetryPacket::New(DataType::GpsData, eps, sender, ts, payload_arc);
+            TelemetryPacket::New(DataType::GpsData, eps, std::make_shared<std::string>(sender), ts, payload_arc);
     EXPECT_TRUE(r.is_ok()) << "failed to build GPS packet";
     return r.unwrap();
 }

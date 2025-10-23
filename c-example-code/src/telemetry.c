@@ -3,6 +3,8 @@
 #include <string.h>
 #include "sedsprintf.h"
 #include <time.h>
+#include <sys/time.h>
+
 
 // --- Monotonic milliseconds provider for the FFI timeout calls ---
 static uint64_t host_now_ms(void * user)
@@ -21,28 +23,12 @@ static uint64_t host_now_ms(void * user)
     // convert to ms
     return (uint64_t) ((ctr.QuadPart * 1000ULL) / (uint64_t) freq.QuadPart);
 
-    // POSIX: prefer CLOCK_MONOTONIC if available
-#elif defined(CLOCK_MONOTONIC)
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) (ts.tv_nsec / 1000000ULL);
-
-    // Fallback: gettimeofday (not strictly monotonic, but OK for tests)
 #else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (uint64_t) tv.tv_sec * 1000ULL + (uint64_t) (tv.tv_usec / 1000ULL);
 #endif
 }
-
-
-uint64_t node_now_since_bus_ms(void *user)
-{
-    const RouterState router = g_router;               // same user passed to TX
-    const uint64_t now = host_now_ms(NULL);       // monotonic ms
-    return (router.r) ? (now - router.start_time) : 0;
-}
-
 
 // Define the global router state here (one definition only)
 RouterState g_router = {.r = NULL, .created = 0};
@@ -110,7 +96,7 @@ SedsResult init_telemetry_router(void)
     SedsRouter * r = seds_router_new(
         tx_send,
         NULL, // tx_user
-        node_now_since_bus_ms,
+        host_now_ms,
         locals,
         sizeof(locals) / sizeof(locals[0])
     );

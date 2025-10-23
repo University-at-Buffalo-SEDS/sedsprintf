@@ -141,7 +141,7 @@ TEST(Formatting, HeaderStringMatchesExpectation)
     const auto pkt = MakeGpsPacketFromF32s({1.0f, 2.0f, 3.0f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
     const auto s = pkt.HeaderString();
     EXPECT_EQ(s,
-              "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0 (0s   0ms)");
+              "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0 (0s 000ms)");
 }
 
 TEST(Formatting, PacketToStringFormatsFloats)
@@ -150,7 +150,7 @@ TEST(Formatting, PacketToStringFormatsFloats)
     const auto pkt = MakeGpsPacketFromF32s({1.0f, 2.5f, 3.25f}, endpoints, 0, /*sender=*/"TEST_PLATFORM");
     auto text = pkt.ToString();
     ASSERT_TRUE(text.rfind(
-        "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0 (0s   0ms), Data: ",
+        "Type: GPS_DATA, Size: 12, Sender: TEST_PLATFORM, Endpoints: [SD_CARD, RADIO], Timestamp: 0 (0s 000ms), Data: ",
         0) == 0);
     EXPECT_NE(text.find('1'), std::string::npos);
     EXPECT_NE(text.find("2.5"), std::string::npos);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(c_example_code C)
+project(c_example_code C CXX)
 
 set(CMAKE_C_STANDARD 11)
 
@@ -22,6 +22,6 @@ add_subdirectory(
 )
 
 # 4) Link + add the libraries public headers
-target_link_libraries(c_system_test PRIVATE sedsprintf)
-target_include_directories(c_system_test PRIVATE "${SEDSPRINTF_INCLUDE_DIR}")
+target_link_libraries(c_example_code PRIVATE sedsprintf)
+target_include_directories(c_example_code PRIVATE "${SEDSPRINTF_INCLUDE_DIR}")
 

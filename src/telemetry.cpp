@@ -6,6 +6,8 @@
 
 namespace seds
 {
+    static constexpr std::uint64_t EPOCH_MS_THRESHOLD = 1'000'000'000'000ULL;
+
     // ---------------------- TelemetryPacket impl ----------------------
 
     TelemetryResult<TelemetryPacket> TelemetryPacket::New(
@@ -51,7 +53,7 @@ namespace seds
                 TelemetryError::SizeMismatch(meta.data_size, bytes.size()));
         }
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(bytes);
-        return New(ty, endpoints, std::make_shared<std::string>( DEVICE_IDENTIFIER), timestamp, std::move(payload_arc));
+        return New(ty, endpoints, std::make_shared<std::string>(DEVICE_IDENTIFIER), timestamp, std::move(payload_arc));
     }
 
     TelemetryResult<TelemetryPacket> TelemetryPacket::FromF32Slice(
@@ -85,7 +87,8 @@ namespace seds
             bytes.insert(bytes.end(), out, out + 4);
         }
         auto payload_arc = std::make_shared<const std::vector<std::uint8_t>>(std::move(bytes));
-        return TelemetryPacket::New(ty, endpoints, std::make_shared<std::string>(DEVICE_IDENTIFIER), timestamp, std::move(payload_arc));
+        return TelemetryPacket::New(ty, endpoints, std::make_shared<std::string>(DEVICE_IDENTIFIER), timestamp,
+                                    std::move(payload_arc));
     }
 
     TelemetryResult<void *> TelemetryPacket::Validate() const
@@ -122,25 +125,75 @@ namespace seds
         std::string endpoints_s;
         BuildEndpointString(endpoints_s);
 
-        // convert timestamp (ms since boot) into human-readable format
         const uint64_t total_ms = timestamp;
-        const uint64_t hours = total_ms / 3'600'000ULL;
-        const uint64_t minutes = (total_ms % 3'600'000ULL) / 60'000ULL;
-        const uint64_t seconds = (total_ms % 60'000ULL) / 1'000ULL;
-        const uint64_t milliseconds = total_ms % 1'000ULL;
 
+        // --------- Human-readable time ---------
         std::ostringstream human_time;
-        if (hours > 0)
-            human_time << hours << "h " << std::setw(2) << std::setfill('0')
-                    << minutes << "m " << std::setw(2) << seconds << "s "
-                    << std::setw(3) << milliseconds << "ms";
-        else if (minutes > 0)
-            human_time << minutes << "m " << std::setw(2) << std::setfill('0')
-                    << seconds << "s " << std::setw(3) << milliseconds << "ms";
-        else
-            human_time << seconds << "s " << std::setw(3) << milliseconds << "ms";
 
-        // build the full header string
+        if (total_ms >= EPOCH_MS_THRESHOLD)
+        {
+            // Treat as Unix epoch (milliseconds) and format as UTC
+            const auto secs = static_cast<std::time_t>(total_ms / 1000ULL);
+            const auto sub_ms = static_cast<uint32_t>(total_ms % 1000ULL);
+
+            std::tm tm_utc{};
+            bool ok;
+
+            // Cross-platform gmtime (UTC) handling
+#if defined(_WIN32)
+            ok = (gmtime_s(&tm_utc, &secs) == 0);
+#elif defined(__unix__) || defined(__APPLE__)
+            ok = (gmtime_r(&secs, &tm_utc) != nullptr);
+#else
+            if (auto * ptm = std::gmtime(&secs)) tm_utc = *ptm;
+            else ok = false;
+#endif
+
+            if (ok)
+            {
+                human_time << std::setfill('0')
+                        << std::setw(4) << (tm_utc.tm_year + 1900) << '-'
+                        << std::setw(2) << (tm_utc.tm_mon + 1) << '-'
+                        << std::setw(2) << tm_utc.tm_mday << ' '
+                        << std::setw(2) << tm_utc.tm_hour << ':'
+                        << std::setw(2) << tm_utc.tm_min << ':'
+                        << std::setw(2) << tm_utc.tm_sec << '.'
+                        << std::setw(3) << sub_ms << 'Z';
+            }
+            else
+            {
+                human_time << "Invalid epoch (" << total_ms << ')';
+            }
+        }
+        else
+        {
+            // Treat as uptime (milliseconds since boot)
+            const uint64_t hours = total_ms / 3'600'000ULL;
+            const uint64_t minutes = (total_ms % 3'600'000ULL) / 60'000ULL;
+            const uint64_t seconds = (total_ms % 60'000ULL) / 1'000ULL;
+            const uint64_t milliseconds = total_ms % 1'000ULL;
+
+            if (hours > 0)
+            {
+                human_time << hours << "h "
+                        << std::setw(2) << std::setfill('0') << minutes << "m "
+                        << std::setw(2) << seconds << "s "
+                        << std::setw(3) << milliseconds << "ms";
+            }
+            else if (minutes > 0)
+            {
+                human_time << minutes << "m "
+                        << std::setw(2) << std::setfill('0') << seconds << "s "
+                        << std::setw(3) << milliseconds << "ms";
+            }
+            else
+            {
+                human_time << seconds << "s "
+                        << std::setw(3) << std::setfill('0') << milliseconds << "ms";
+            }
+        }
+
+        // --------- Build the full header string ---------
         std::ostringstream out;
         out << "Type: " << data_type_as_str(ty)
                 << ", Size: " << data_size

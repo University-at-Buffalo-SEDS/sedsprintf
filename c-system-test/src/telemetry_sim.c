@@ -1,7 +1,8 @@
 #include "telemetry_sim.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
+#include <sys/time.h>
+
 
 // ===================== BUS =====================
 
@@ -74,11 +75,11 @@ SedsResult radio_handler(const SedsPacketView * pkt, void * user)
     const SedsResult s = seds_pkt_to_string(pkt, buf, sizeof(buf));
     if (s != SEDS_OK)
     {
-        fprintf(stderr, "[RADIO] to_string failed: %d\n", s);
+        fprintf(stderr, "[RADIO] to_string failed: {%d}\n", s);
         return s;
     }
     if (self) self->radio_hits++;
-    printf("[RADIO] %s\n", buf);
+    printf("[RADIO] {%s}\n", buf);
     return SEDS_OK;
 }
 
@@ -89,11 +90,11 @@ SedsResult sdcard_handler(const SedsPacketView * pkt, void * user)
     const SedsResult s = seds_pkt_to_string(pkt, buf, sizeof(buf));
     if (s != SEDS_OK)
     {
-        fprintf(stderr, "[SD] to_string failed: %d\n", s);
+        fprintf(stderr, "[SD] to_string failed: {%d}\n", s);
         return s;
     }
     if (self) self->sd_hits++;
-    printf("[SD] wrote: %s\n", buf);
+    printf("[SD] wrote: {%s}\n", buf);
     return SEDS_OK;
 }
 
@@ -207,17 +208,10 @@ uint64_t host_now_ms(void * user)
     QueryPerformanceCounter(&ctr);
     // convert to ms
     return (uint64_t) ((ctr.QuadPart * 1000ULL) / (uint64_t) freq.QuadPart);
-
-    // POSIX: prefer CLOCK_MONOTONIC if available
-#elif defined(CLOCK_MONOTONIC)
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
-
     // Fallback: gettimeofday (not strictly monotonic, but OK for tests)
 #else
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) (ts.tv_nsec / 1000000ULL);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 #endif
 }

@@ -74,10 +74,10 @@ SedsResult on_radio_packet(const SedsPacketView * pkt, void * user)
     SedsResult s = seds_pkt_to_string(pkt, buf, sizeof(buf));
     if (s != SEDS_OK)
     {
-        printf("on_radio_packet: seds_pkt_to_string failed: %d\n", s);
+        printf("on_radio_packet: seds_pkt_to_string failed: {%d}\n", s);
         return s;
     }
-    printf("on_radio_packet: %s\n", buf);
+    printf("on_radio_packet: {%s}\n", buf);
     return SEDS_OK;
 }
 

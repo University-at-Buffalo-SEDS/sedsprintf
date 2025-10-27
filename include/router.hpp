@@ -11,6 +11,7 @@
 #include <vector>
 #include <functional>
 #include <cstring>   // for std::memcpy
+#include <queue>
 
 #include "config.hpp"
 #include "telemetry.hpp"

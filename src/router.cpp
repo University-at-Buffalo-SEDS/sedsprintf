@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
-#include <deque>     // if Router uses std::queue internally, fine; we only interact via methods
 #include <memory>
 #include <optional>
 #include <utility>

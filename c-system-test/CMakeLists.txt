@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.22)
+project(c_system_test LANGUAGES C CXX)
+
+set(CMAKE_C_STANDARD 11)
+
+# 1) Define the target first
+add_executable(c_system_test
+        src/main.c
+        src/telemetry_sim.c
+)
+
+# 2) Local includes (your own headers)
+target_include_directories(c_system_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+get_filename_component(SEDSPRINTF_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." REALPATH)
+add_subdirectory(
+        "${SEDSPRINTF_ROOT}"
+        "${CMAKE_CURRENT_BINARY_DIR}/sedsprintf-build"
+        EXCLUDE_FROM_ALL
+)
+
+# 4) Link + add the libraries public headers
+target_link_libraries(c_system_test PRIVATE sedsprintf)
+target_include_directories(c_system_test PRIVATE "${SEDSPRINTF_INCLUDE_DIR}")
